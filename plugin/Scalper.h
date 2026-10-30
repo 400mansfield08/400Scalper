@@ -28,6 +28,16 @@ public:
     bool SerializeState (IByteChunk& chunk) const override;
     int UnserializeState (const IByteChunk& chunk, int startPos) override;
 
+#if defined CLAP_API
+    // CLAP fixes on top of iPlug2's wrapper (found with clap-validator):
+    // - state save must cope with hosts that accept only a few bytes per write() call
+    // - stepped parameters (enum / int / bool) round values before showing them as text
+    // - text typed into the host ("2.5k", "-3 dB", "24 dB/oct") converts back to the same value
+    bool stateSave (const clap_ostream* stream) noexcept override;
+    bool paramsValueToText (clap_id paramIdx, double value, char* display, uint32_t size) noexcept override;
+    bool paramsTextToValue (clap_id paramIdx, const char* display, double* pValue) noexcept override;
+#endif
+
     // shared with the UI
     scalper::Processor proc;
     std::atomic<int> selectedBand { 0 };

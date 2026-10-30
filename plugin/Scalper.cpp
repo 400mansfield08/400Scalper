@@ -23,7 +23,7 @@ constexpr int kStateVersion = 1;
 void displayDb (double v, WDL_String& s) { s.SetFormatted (32, "%+.1f", std::fabs (v) < 0.05 ? 0.0 : v); }
 void displayHz (double v, WDL_String& s)
 {
-    if (v >= 1000.0) s.SetFormatted (32, "%.2f k", v / 1000.0); else s.SetFormatted (32, "%.0f ", v);
+    if (v >= 1000.0) s.SetFormatted (32, "%.2f kHz", v / 1000.0); else s.SetFormatted (32, "%.0f Hz", v);
 }
 }
 
@@ -41,7 +41,7 @@ Scalper::Scalper (const InstanceInfo& info)
                 GetParam (i)->InitDouble (p.name, p.def, p.min, p.max, 0.01, "dB", flags, p.group, IParam::ShapeLinear(), IParam::kUnitDB, displayDb);
                 break;
             case Unit::Hz:
-                GetParam (i)->InitDouble (p.name, p.def, p.min, p.max, 0.01, "Hz", flags, p.group, IParam::ShapeExp(), IParam::kUnitFrequency, displayHz);
+                GetParam (i)->InitDouble (p.name, p.def, p.min, p.max, 0.01, "", flags, p.group, IParam::ShapeExp(), IParam::kUnitFrequency, displayHz);
                 break;
             case Unit::Percent:
                 GetParam (i)->InitDouble (p.name, p.def, p.min, p.max, 0.01, "%", flags, p.group, IParam::ShapeLinear(), IParam::kUnitPercentage);
@@ -115,6 +115,63 @@ void Scalper::OnIdle()
         SetLatency (proc.latencySamples (wanted));
     }
 }
+
+#if defined CLAP_API
+bool Scalper::stateSave (const clap_ostream* stream) noexcept
+{
+    IByteChunk chunk;
+    if (! SerializeState (chunk)) return false;
+    const uint8_t* data = chunk.GetData();
+    int64_t left = chunk.Size(), done = 0;
+    while (left > 0)
+    {
+        const int64_t n = stream->write (stream, data + done, uint64_t (left));
+        if (n <= 0) return false;
+        done += n; left -= n;
+    }
+    return true;
+}
+
+bool Scalper::paramsValueToText (clap_id paramIdx, double value, char* display, uint32_t size) noexcept
+{
+    const IParam* p = GetParam (int (paramIdx));
+    if (! p || ! display || size == 0) return false;
+    const bool isDouble = p->Type() == IParam::kTypeDouble;
+    if (! isDouble) value = std::round (value);
+    WDL_String str;
+    p->GetDisplay (value, isDouble, str);
+    if (CStringHasContents (p->GetLabel())) { str.Append (" "); str.Append (p->GetLabel()); }
+    if (uint32_t (str.GetLength()) + 1 > size) return false;
+    std::strcpy (display, str.Get());
+    return true;
+}
+
+bool Scalper::paramsTextToValue (clap_id paramIdx, const char* display, double* pValue) noexcept
+{
+    const IParam* p = GetParam (int (paramIdx));
+    if (! p || ! display || ! pValue) return false;
+    if (p->Type() != IParam::kTypeDouble)
+    {
+        // enum / bool texts ("24 dB/oct", "On"), otherwise a plain number
+        double v = 0;
+        if (! p->MapDisplayText (display, &v))
+        {
+            char* end = nullptr;
+            v = std::strtod (display, &end);
+            if (end == display) return false;
+        }
+        *pValue = std::clamp (std::round (v), p->GetMin(), p->GetMax());
+        return true;
+    }
+    char* end = nullptr;
+    double v = std::strtod (display, &end);
+    if (end == display) return false;
+    while (*end == ' ') ++end;
+    if (*end == 'k' || *end == 'K') v *= 1000.0;
+    *pValue = p->ToNormalized (std::clamp (v, p->GetMin(), p->GetMax()));
+    return true;
+}
+#endif
 
 //------------------------------------------------------------------------------
 // State: magic, version, all parameters, selected band.
