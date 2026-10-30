@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>400Scalper</title>
+<style>
+@font-face{font-family:'Sui Generis';src:url(fonts/SuiGenerisRg-Regular.ttf) format('truetype');font-display:swap}
+:root{--accent:#FF6A13;--grey:#8A8A8A}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#050505;color:#E6E6E6;font-family:'Sui Generis',system-ui,sans-serif;-webkit-text-size-adjust:100%}
+button{font-family:'Sui Generis',sans-serif}
+.plugin{position:relative;width:100vw;height:100vh;min-width:640px;min-height:420px;background:#0D0D0D;border:none;border-radius:0;overflow:hidden;display:flex;flex-direction:column;user-select:none;-webkit-user-select:none}
+.hdr{height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 20px;background:#090909;border-bottom:1px solid #1F1F1F}
+.word{position:relative}
+.wbtn{display:flex;align-items:center;gap:0;padding:4px 6px;margin-left:-6px;border:none;border-radius:5px;background:transparent;color:#E6E6E6;font-size:22px;letter-spacing:.02em;white-space:nowrap;cursor:pointer}
+.wbtn span{color:var(--accent)}
+.wbtn:focus{outline:none}
+.wbtn:focus-visible{outline:1px solid #3A3A3A;outline-offset:2px}
+.pop{position:absolute;left:-6px;top:42px;z-index:20;width:208px;padding:12px;background:#141414;border:1px solid #333;border-radius:6px;display:none;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.pop.open{display:flex}
+.pop h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.12em;color:#8C8C8C}
+.wheel{position:relative;width:184px;height:184px;touch-action:none;cursor:crosshair}
+.wheel canvas{width:184px;height:184px;border-radius:92px}
+.wheel .mk{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:7px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);pointer-events:none}
+.prow{display:flex;align-items:center;gap:8px;font-size:9px;letter-spacing:.1em;color:#8C8C8C}
+.prow input[type=range]{flex:1;width:auto}
+.sw{width:24px;height:24px;border-radius:4px;border:1px solid #333;background:var(--accent);flex-shrink:0}
+.hex{width:76px;height:26px;padding:0 6px;border:1px solid #333;border-radius:4px;background:#0D0D0D;color:#E6E6E6;font:11px 'Sui Generis',sans-serif;letter-spacing:.04em}
+.rst{height:26px;padding:0 8px;border:1px solid #333;border-radius:4px;background:#1A1A1A;color:#BDBDBD;font-size:9px;letter-spacing:.08em;cursor:pointer}
+.vh{position:absolute;left:-9999px}
+.seg{display:flex;padding:3px;gap:2px;background:#121212;border:1px solid #262626;border-radius:6px}
+.seg button{height:26px;padding:0 12px;border:none;border-radius:4px;background:transparent;color:#8C8C8C;font-size:11px;letter-spacing:.08em;cursor:pointer}
+.seg button[aria-pressed=true]{background:#262626;color:var(--accent)}
+.clip{display:flex;align-items:center;gap:16px;font-size:11px;letter-spacing:.08em;color:#8C8C8C}
+.clip .dot{width:8px;height:8px;border-radius:4px;background:#2A2A2A;display:inline-block}
+.clip .val{color:#E6E6E6;min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.mid{flex:1;min-height:0;padding:14px 16px 0;display:flex;gap:10px}
+.meter{width:34px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:9px}
+.meter .lbl{height:12px;letter-spacing:.1em;color:#8C8C8C}
+.meter canvas{width:22px;flex:1;min-height:0;background:#070707;border:1px solid #1F1F1F;border-radius:3px}
+.meter .pk{height:12px;color:#E6E6E6;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scope{position:relative;flex:1;min-width:0;background:#070707;border:1px solid #1F1F1F;border-radius:6px;overflow:hidden;touch-action:none}
+.scope canvas{position:absolute;left:0;top:0}
+.gutter{position:absolute;right:0;top:0;bottom:0;width:40px;border-left:1px solid #1A1A1A;background:#0A0A0A}
+.tick{position:absolute;right:6px;width:30px;font-size:9px;line-height:12px;color:#8C8C8C;text-align:right;font-variant-numeric:tabular-nums}
+.thr{position:absolute;left:0;height:20px;padding:0;margin:0;border:none;background:transparent;cursor:ns-resize;touch-action:none}
+.thr span{position:absolute;right:6px;top:-7px;padding:3px 6px;border-radius:3px;background:#1C1C1C;border:1px solid #333;font-size:10px;color:#E6E6E6;white-space:nowrap}
+.scopetag{position:absolute;left:8px;top:8px;padding:3px 7px;border-radius:3px;background:rgba(18,18,18,.92);border:1px solid #333;font-size:9px;letter-spacing:.08em;color:var(--accent);display:none}
+.tools{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.08em;color:#8C8C8C}
+.grp{display:flex;align-items:center;background:rgba(18,18,18,.92);border:1px solid #262626;border-radius:5px;height:30px;padding:0 8px;gap:6px}
+.grp label{color:#8C8C8C}
+.grp span{min-width:44px;text-align:right;color:#E6E6E6;font-variant-numeric:tabular-nums}
+.grp span.z{min-width:30px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:84px;height:20px;margin:0;background:transparent;cursor:pointer;touch-action:none}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(to right,var(--accent) var(--p,0%),#333 var(--p,0%))}
+input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:#333}
+input[type=range]::-moz-range-progress{height:3px;border-radius:2px;background:var(--accent)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4.5px;border-radius:6px;background:#E6E6E6;border:none}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:6px;background:#E6E6E6;border:none}
+input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tbtn{height:30px;padding:0 8px;border:1px solid #262626;border-radius:5px;background:rgba(18,18,18,.92);color:#BDBDBD;cursor:pointer;font-size:9px;letter-spacing:.08em}
+.tbtn[aria-pressed=true]{color:var(--accent);border-color:var(--accent)}
+.foot{height:178px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px}
+.kn{display:flex;flex-direction:column;align-items:center;gap:6px;width:80px;flex-shrink:0}
+.kn .lbl{font-size:10px;letter-spacing:.12em;color:#8C8C8C;white-space:nowrap}
+.kn .lbl b{color:var(--accent);font-weight:400}
+.kn button{width:64px;height:64px;padding:0;border:none;background:transparent;cursor:ns-resize;border-radius:32px;touch-action:none}
+.kn .v{font-size:11px;color:#E6E6E6;font-variant-numeric:tabular-nums}
+.curve{display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0}
+.curve span{font-size:10px;letter-spacing:.12em;color:#8C8C8C}
+.curve canvas{width:84px;height:84px;background:#070707;border:1px solid #1F1F1F;border-radius:4px}
+/* multiband panel */
+.mb{flex:1;min-width:220px;height:150px;display:flex;flex-direction:column;gap:5px}
+.mbh{height:22px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;letter-spacing:.1em;color:#8C8C8C;white-space:nowrap}
+.mbh>span{overflow:hidden;text-overflow:ellipsis}
+.mbh .sel{color:var(--accent)}
+.slope{display:flex;padding:2px;gap:1px;background:#121212;border:1px solid #262626;border-radius:4px}
+.slope button{height:18px;padding:0 5px;white-space:nowrap;border:none;border-radius:3px;background:transparent;color:#8C8C8C;font-size:9px;letter-spacing:.04em;cursor:pointer}
+.slope button[aria-pressed=true]{background:#262626;color:var(--accent)}
+.spec{position:relative;flex:1;min-height:0;background:#070707;border:1px solid #1F1F1F;border-radius:4px;overflow:hidden;touch-action:none}
+.spec canvas{position:absolute;left:0;top:0}
+.band{position:absolute;top:0;bottom:0;border:none;padding:0;margin:0;background:transparent;cursor:pointer}
+.band span{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);font-size:9px;color:#8C8C8C}
+.band[aria-pressed=true] span{color:var(--accent)}
+.xo{position:absolute;top:0;bottom:0;width:16px;margin-left:-8px;border:none;padding:0;background:transparent;cursor:ew-resize;touch-action:none}
+.xo::after{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:#E6E6E6;opacity:.75}
+.xo span{position:absolute;top:24px;left:11px;padding:1px 4px;border-radius:2px;background:#1C1C1C;border:1px solid #333;font-size:8px;color:#E6E6E6;white-space:nowrap}
+.xo.flip span{left:auto;right:11px}
+.solo{position:absolute;top:3px;width:18px;height:18px;margin-left:-21px;padding:0;border:1px solid #3A3A3A;border-radius:3px;background:#161616;color:#BDBDBD;font-size:9px;line-height:16px;cursor:pointer;z-index:2}
+.solo[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#0D0D0D}
+.edge{position:absolute;top:50%;width:14px;height:34px;margin-top:-17px;border:1px solid #333;background:#161616;color:#BDBDBD;font-size:11px;line-height:1;padding:0;cursor:ew-resize;touch-action:none}
+.edge.l{left:0;border-left:none;border-radius:0 4px 4px 0}
+.edge.r{right:0;border-right:none;border-radius:4px 0 0 4px}
+.edge[hidden]{display:none}
+.ctx{position:absolute;z-index:5;display:none;flex-direction:column;background:#161616;border:1px solid #333;border-radius:4px;padding:3px;min-width:120px}
+.ctx button{height:24px;padding:0 8px;text-align:left;border:none;border-radius:3px;background:transparent;color:#E6E6E6;font-size:9px;letter-spacing:.06em;cursor:pointer}
+.ctx button:hover,.ctx button:focus-visible{background:#262626;outline:none}
+.ctx button[disabled]{color:#5A5A5A;cursor:default}
+/* compact layout for small plugin windows */
+@media (max-width: 820px) {
+  .foot{gap:6px;padding:0 10px}
+  .kn{width:66px}
+  .kn .lbl{font-size:9px;letter-spacing:.06em}
+  .curve canvas{width:70px;height:70px}
+  .mb{min-width:160px}
+  input[type=range]{width:56px}
+  .grp{padding:0 6px;gap:4px}
+  .grp span{min-width:36px}
+  .grp span.z{min-width:24px}
+  .tbtn{padding:0 6px}
+  .tools{gap:4px}
+}
+</style>
+</head>
+<body>
+<div class="plugin">
+        <div class="hdr">
+          <div class="word">
+            <button type="button" class="wbtn" id="wbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="pop" aria-label="400Scalper, change accent color"><span>400</span>SCALPER</button>
+            <div class="pop" id="pop" role="dialog" aria-label="Accent color">
+              <h3>ACCENT COLOR</h3>
+              <div class="wheel" id="wheel"><canvas id="wheelCv" aria-hidden="true"></canvas><span class="mk" id="wheelMk"></span></div>
+              <div class="prow"><label for="valSl">BRIGHT</label><input id="valSl" type="range" min="20" max="100" step="1"></div>
+              <div class="prow"><span class="sw" aria-hidden="true"></span><label for="hexIn" class="vh">Hex color</label><input id="hexIn" class="hex" type="text" maxlength="7" spellcheck="false"><button type="button" class="rst" id="accReset">RESET</button></div>
+            </div>
+          </div>
+          <div class="seg" role="group" aria-label="Clip mode">
+            <button type="button" id="mSample" aria-pressed="true">SAMPLE</button>
+            <button type="button" id="mSpec" aria-pressed="false">SPECTRAL</button>
+          </div>
+          <div class="clip">
+            <span style="display:flex;align-items:center;gap:8px"><span class="dot" id="clipDot"></span><span id="clipLbl">CLIP</span><span class="val" id="grText">0.0 dB</span></span>
+            <svg width="31" height="22" viewBox="328 225 1343 980" role="img" aria-label="Always 400">
+              <path d="M328 1160 L1263 225 L1308 225 L1671 1155 L1671 1205 L1320 1205 L1320 1157 L1088 1157 L1267 978 L1267 916 L978 1205 L328 1205 Z" fill="#E6E6E6"/>
+              <path d="M1402 225 L1671 225 L1671 916 Z" fill="#E6E6E6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="mid">
+          <div class="meter"><span class="lbl">IN</span><canvas id="meterIn" aria-hidden="true"></canvas><span class="pk" id="inPk">−∞</span></div>
+          <div class="scope" id="scope">
+            <canvas id="scopeCv" aria-hidden="true"></canvas>
+            <div class="gutter"></div>
+            <div id="ticks"></div>
+            <span class="scopetag" id="scopeTag">BAND 1</span>
+            <button type="button" class="thr" id="thr" aria-label="Threshold, drag up or down"><span id="thrText">−6.0 dB</span></button>
+            <div class="tools">
+              <div class="grp"><label for="tSl">TIME</label><input id="tSl" type="range" min="0" max="1000" step="1"><span id="tTxt">3.0 s</span></div>
+              <div class="grp"><label for="zSl">ZOOM</label><input id="zSl" type="range" min="0" max="1000" step="1"><span id="zTxt" class="z">1×</span></div>
+              <button type="button" class="tbtn" id="follow" aria-pressed="true">FOLLOW</button>
+              <button type="button" class="tbtn" id="freeze" aria-pressed="false">FREEZE</button>
+              <button type="button" class="tbtn" id="fit">FIT</button>
+            </div>
+          </div>
+          <div class="meter"><span class="lbl">OUT</span><canvas id="meterOut" aria-hidden="true"></canvas><span class="pk" id="outPk">−∞</span></div>
+        </div>
+
+        <div class="foot" id="foot">
+          <div id="slotIn"></div>
+          <div class="mb">
+            <div class="mbh">
+              <span id="mbHead">BANDS <span class="sel" id="mbSel"></span></span>
+              <div class="slope" role="group" aria-label="Crossover slope">
+                <button type="button" data-s="6" aria-pressed="false">6 dB</button>
+                <button type="button" data-s="12" aria-pressed="false">12 dB</button>
+                <button type="button" data-s="24" aria-pressed="true">24 dB</button>
+              </div>
+            </div>
+            <div class="spec" id="spec">
+              <canvas id="specCv" aria-hidden="true"></canvas>
+              <div id="bandLayer"></div>
+              <button type="button" class="edge l" id="edgeL" aria-label="Drag right to add a low band">‹</button>
+              <button type="button" class="edge r" id="edgeR" aria-label="Drag left to add a high band">›</button>
+              <div class="ctx" id="ctx" role="menu">
+                <button type="button" role="menuitem" id="ctxAdd">ADD BAND HERE</button>
+                <button type="button" role="menuitem" id="ctxDel">REMOVE CROSSOVER</button>
+                <button type="button" role="menuitem" id="ctxReset">SINGLE BAND</button>
+              </div>
+            </div>
+          </div>
+          <div id="slotRest" style="display:flex;align-items:center;gap:8px"></div>
+        </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  const DEFAULT_ACCENT = '#FF6A13', grey = '#8A8A8A', minus = '−';
+  let accent = DEFAULT_ACCENT, accentRGB = [255, 106, 19];
+  const $ = (id) => document.getElementById(id);
+  const dbToA = (db) => Math.pow(10, db / 20);
+  const scale = 1;
+
+  // ---------- parameter ids (must match src/Params.h) ----------
+  const ID = { inGain: 0, outGain: 1, bands: 2, slope: 3, xover: 4, thr: 10, knee: 20, solo: 30 };
+  const SLOPES = [6, 12, 24];
+  const PDEF = {};   // id -> {min,max,def}
+  const P = {};      // id -> value
+  const dragging = new Set(); // ids being edited from the UI (ignore host echoes)
+
+  // ==========================================================================
+  // Engines. NativeEngine talks to the plugin; SimEngine is a browser preview
+  // (same DSP idea as the review mockups) used when the page runs outside the plugin.
+  // ==========================================================================
+  const NativeEngine = {
+    name: 'native',
+    init: async () => JSON.parse(await window.scalperInit()),
+    poll: async (band, since, maxEntries, wantFft) => JSON.parse(await window.scalperPoll(band, since, maxEntries, wantFft ? 1 : 0)),
+    set: (id, v) => { window.scalperSet(id, v); },
+    gesture: (id, begin) => { window.scalperGesture(id, begin ? 1 : 0); },
+    setSel: (n) => { window.scalperSetSel(n); },
+    setAccent: (hex) => { window.scalperSetAccent(hex); },
+  };
+
+  function makeSimEngine() {
+    const SR = 44100, DEC = 4, RATE = SR / DEC;
+    const defs = [
+      [0, -24, 24, 0], [1, -24, 24, 0], [2, 1, 4, 1], [3, 0, 2, 2], [4, 30, 16000, 120], [5, 30, 16000, 1000], [6, 30, 16000, 6000],
+      [10, -24, 0, -6], [11, -24, 0, -6], [12, -24, 0, -6], [13, -24, 0, -6],
+      [20, 0, 100, 30], [21, 0, 100, 30], [22, 0, 100, 30], [23, 0, 100, 30],
+      [30, 0, 1, 0], [31, 0, 1, 0], [32, 0, 1, 0], [33, 0, 1, 0]];
+    const vals = {}; defs.forEach(([id, , , d]) => vals[id] = d);
+    let sel = 0, acc = DEFAULT_ACCENT;
+    // drum loop
+    const LEN = SR * 4, sig = new Float32Array(LEN);
+    (function () {
+      let seed = 1234567; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff * 2 - 1; };
+      let hp = 0, prev = 0;
+      for (let i = 0; i < LEN; i++) {
+        const t = i / SR, beat = Math.floor(t / 0.5), tk = t - beat * 0.5;
+        const kick = (beat % 4 === 0 ? 1.05 : 0.9) * Math.exp(-tk * 7) * Math.sin(2 * Math.PI * (45 * tk + 80 * (1 - Math.exp(-30 * tk)) / 30));
+        const n = rnd(); hp = 0.6 * (hp + n - prev); prev = n;
+        const snare = beat % 2 === 1 ? 0.55 * n * Math.exp(-tk * 16) + 0.3 * Math.sin(2 * Math.PI * 190 * tk) * Math.exp(-tk * 24) : 0;
+        const hat = 0.22 * hp * Math.exp(-(t % 0.25) * 45);
+        const bass = 0.22 * Math.sin(2 * Math.PI * 55 * t) * (1 - 0.85 * Math.exp(-tk * 7));
+        sig[i] = kick + snare + hat + bass;
+      }
+    })();
+    const clip = (x, T, k) => { const a = Math.abs(x), ks = T * (1 - k); if (a <= ks) return x; const s = x < 0 ? -1 : 1; if (k <= 1e-4) return s * T; const w = T - ks; return s * (ks + w * Math.tanh((a - ks) / w)); };
+    const lp = [0, 0, 0];
+    const CAP = Math.ceil(RATE * 7);
+    const rings = [0, 1, 2, 3].map(() => new Float32Array(CAP * 4));
+    let count = 0, pos = 0, carry = 0, last = performance.now(), dcount = 0;
+    const accu = [0, 1, 2, 3].map(() => [0, 0, 0, 0]);
+    const fft = new Float32Array(2048); let fpos = 0;
+    let mi = 0, mo = 0;
+    const bIn = [0, 0, 0, 0];
+    function run() {
+      const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+      carry += dt * SR; let n = Math.floor(carry); carry -= n;
+      const nb = Math.round(vals[2]), gIn = dbToA(vals[0]), gOut = dbToA(vals[1]);
+      const anySolo = nb > 1 && [0, 1, 2, 3].some((b) => b < nb && vals[30 + b] >= 0.5);
+      const a = [0, 1, 2].map((i) => 1 - Math.exp(-2 * Math.PI * vals[4 + i] / SR));
+      while (n-- > 0) {
+        const x = sig[pos] * gIn; pos = (pos + 1) % LEN;
+        let rem = x;
+        for (let b = 0; b < nb - 1; b++) { lp[b] += a[b] * (rem - lp[b]); bIn[b] = lp[b]; rem -= lp[b]; }
+        bIn[nb - 1] = rem;
+        let y = 0;
+        for (let b = 0; b < nb; b++) {
+          const o = clip(bIn[b], dbToA(vals[10 + b]), vals[20 + b] / 100);
+          if (!anySolo || vals[30 + b] >= 0.5) y += o;
+          const A = accu[b];
+          if (dcount === 0) { A[0] = A[1] = bIn[b]; A[2] = A[3] = o; }
+          else { A[0] = Math.min(A[0], bIn[b]); A[1] = Math.max(A[1], bIn[b]); A[2] = Math.min(A[2], o); A[3] = Math.max(A[3], o); }
+        }
+        if (++dcount >= DEC) {
+          const idx = (count % CAP) * 4;
+          for (let b = 0; b < 4; b++) { const A = b < nb ? accu[b] : [0, 0, 0, 0]; rings[b].set(A, idx); }
+          count++; dcount = 0;
+        }
+        fft[fpos] = x; fpos = (fpos + 1) % 2048;
+        mi = Math.max(mi, Math.abs(x)); mo = Math.max(mo, Math.abs(y * gOut));
+      }
+    }
+    return {
+      name: 'sim',
+      init: async () => ({ params: defs.map(([id, mn, mx, d]) => ({ id, min: mn, max: mx, def: d, v: vals[id] })), sel, sr: SR, vizRate: RATE, accent: acc }),
+      poll: async (band, since, maxEntries, wantFft) => {
+        run();
+        let from = Math.max(since, count - (CAP - 1024), 0);
+        if (count - from > maxEntries) from = count - maxEntries;
+        const v = new Array((count - from) * 4);
+        const r = rings[Math.max(0, Math.min(3, band))];
+        for (let i = from, k = 0; i < count; i++) { const o = (i % CAP) * 4; v[k++] = r[o]; v[k++] = r[o + 1]; v[k++] = r[o + 2]; v[k++] = r[o + 3]; }
+        const out = { now: count, from, sr: SR, p: defs.map(([id]) => vals[id]), mi, mo, v };
+        mi = mo = 0;
+        if (wantFft) { const f = new Array(2048); for (let i = 0; i < 2048; i++) f[i] = fft[(fpos + i) % 2048]; out.f = f; }
+        return out;
+      },
+      set: (id, v) => { vals[id] = v; },
+      gesture: () => {},
+      setSel: (n) => { sel = n; },
+      setAccent: (h) => { acc = h; },
+    };
+  }
+
+  let engine = null;
+  const ORDER = [0, 1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33];
+
+  // ==========================================================================
+  // Model helpers
+  // ==========================================================================
+  const clampP = (id, v) => { const d = PDEF[id]; if (!d) return v; v = Math.max(d.min, Math.min(d.max, v)); if (id === ID.bands || id === ID.slope || id >= ID.solo) v = Math.round(v); return v; };
+  const nBands = () => Math.max(1, Math.min(4, Math.round(P[ID.bands] || 1)));
+  const xovers = () => { const n = nBands(), a = []; for (let i = 0; i < n - 1; i++) a.push(P[ID.xover + i]); return a; };
+  const bandThr = (b) => P[ID.thr + b];
+  const bandKnee = (b) => P[ID.knee + b];
+  const soloOn = (b) => P[ID.solo + b] >= 0.5;
+  let sel = 0;
+
+  function setParam(id, v, opts) {
+    v = clampP(id, v);
+    P[id] = v;
+    engine.set(id, v);
+    if (!(opts && opts.silent)) refreshAll();
+  }
+  function begin(id) { dragging.add(id); engine.gesture(id, true); }
+  function end(id) { dragging.delete(id); engine.gesture(id, false); }
+  // one-shot edit (click, key press): wrapped in a gesture so hosts record it as one undo step
+  function edit(id, v) { engine.gesture(id, true); setParam(id, v); engine.gesture(id, false); }
+
+  // ==========================================================================
+  // Knobs
+  // ==========================================================================
+  const DEFS = {
+    inGain:    { label: 'IN',        aria: 'Input gain',  min: -24, max: 24,  def: 0,  bip: true,  unit: 'dB', id: () => ID.inGain },
+    threshold: { label: 'THRESHOLD', aria: 'Threshold',   min: -24, max: 0,   def: -6, bip: false, unit: 'dB', id: () => ID.thr + sel },
+    knee:      { label: 'KNEE',      aria: 'Knee',        min: 0,   max: 100, def: 30, bip: false, unit: '%',  id: () => ID.knee + sel },
+    outGain:   { label: 'OUT',       aria: 'Output gain', min: -24, max: 24,  def: 0,  bip: true,  unit: 'dB', id: () => ID.outGain },
+  };
+  function polar(a, r) { const rad = a * Math.PI / 180; return [32 + r * Math.sin(rad), 32 - r * Math.cos(rad)]; }
+  function arc(a0, a1, r) {
+    if (a1 - a0 < 0.5) return 'M0 0';
+    const p0 = polar(a0, r), p1 = polar(a1, r);
+    return 'M' + p0[0].toFixed(2) + ' ' + p0[1].toFixed(2) + ' A' + r + ' ' + r + ' 0 ' + ((a1 - a0) > 180 ? 1 : 0) + ' 1 ' + p1[0].toFixed(2) + ' ' + p1[1].toFixed(2);
+  }
+  function fmt(d, v) {
+    if (d.unit === '%') return Math.round(v) + ' %';
+    const r = Math.round(v * 10) / 10;
+    return (r > 0 ? '+' : (r < 0 ? minus : '')) + Math.abs(r).toFixed(1) + ' dB';
+  }
+  const knobEls = {};
+  function buildKnob(key) {
+    const d = DEFS[key];
+    const wrap = document.createElement('div');
+    wrap.className = 'kn';
+    wrap.innerHTML = '<span class="lbl"></span>' +
+      '<button type="button"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">' +
+      '<path class="tr" fill="none" stroke="#262626" stroke-width="4" stroke-linecap="round"/>' +
+      '<path class="ar" fill="none" style="stroke:var(--accent)" stroke-width="4" stroke-linecap="round"/>' +
+      '<circle cx="32" cy="32" r="19" fill="#1A1A1A" stroke="#333" stroke-width="1"/>' +
+      '<line class="pt" stroke="#E6E6E6" stroke-width="2.5" stroke-linecap="round"/></svg></button>' +
+      '<span class="v"></span>';
+    wrap.querySelector('.tr').setAttribute('d', arc(-135, 135, 27));
+    wrap.querySelector('.lbl').textContent = d.label;
+    const btn = wrap.querySelector('button');
+    let drag = null, lastTap = 0;
+    btn.addEventListener('pointerdown', (e) => {
+      try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+      const id = d.id();
+      const now = performance.now();
+      if (e.pointerType !== 'mouse' && now - lastTap < 300) { edit(id, d.def); lastTap = 0; return; }
+      lastTap = now;
+      drag = { y: e.clientY, v: P[id], id };
+      begin(id);
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      setParam(drag.id, drag.v + (drag.y - e.clientY) / scale / (e.shiftKey ? 800 : 200) * (d.max - d.min));
+    });
+    const stop = () => { if (drag) { end(drag.id); drag = null; } };
+    btn.addEventListener('pointerup', stop); btn.addEventListener('pointercancel', stop);
+    btn.addEventListener('dblclick', () => edit(d.id(), d.def));
+    btn.addEventListener('keydown', (e) => {
+      const step = (d.max - d.min) / (e.shiftKey ? 480 : 96), id = d.id();
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); edit(id, P[id] + step); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); edit(id, P[id] - step); }
+    });
+    knobEls[key] = { btn, ar: wrap.querySelector('.ar'), pt: wrap.querySelector('.pt'), v: wrap.querySelector('.v') };
+    return wrap;
+  }
+  function renderKnob(key) {
+    const d = DEFS[key], k = knobEls[key], v = P[d.id()];
+    const a = -135 + 270 * (v - d.min) / (d.max - d.min);
+    k.ar.setAttribute('d', d.bip ? (a >= 0 ? arc(0, a, 27) : arc(a, 0, 27)) : arc(-135, a, 27));
+    const p1 = polar(a, 7), p2 = polar(a, 16);
+    k.pt.setAttribute('x1', p1[0]); k.pt.setAttribute('y1', p1[1]); k.pt.setAttribute('x2', p2[0]); k.pt.setAttribute('y2', p2[1]);
+    k.v.textContent = fmt(d, v);
+    const multi = nBands() > 1;
+    k.btn.setAttribute('aria-label', d.aria + (d.unit && (key === 'threshold' || key === 'knee') && multi ? ', band ' + (sel + 1) : '') + ', ' + fmt(d, v));
+  }
+  const renderKnobs = () => Object.keys(DEFS).forEach(renderKnob);
+
+  // ==========================================================================
+  // Scope
+  // ==========================================================================
+  const V = { zoom: 1, timeWin: 3, frozen: false, follow: true };
+  let vizRate = 12000, engineSr = 48000;
+  let CAP = 0, ring = null, now = 0, haveFrom = 0, ringBand = -1;
+  function resetRing() { CAP = Math.ceil(vizRate * 6.5); ring = new Float32Array(CAP * 4); now = 0; haveFrom = 0; }
+  function ingest(res, band) {
+    if (band !== ringBand) return;
+    const v = res.v, n = v.length / 4;
+    let idx = res.from;
+    if (res.from - now > CAP) { ring.fill(0); haveFrom = res.from; }
+    else if (res.from > now) { for (let i = now; i < res.from; i++) ring.fill(0, (i % CAP) * 4, (i % CAP) * 4 + 4); }
+    for (let k = 0; k < n; k++, idx++) { const o = (idx % CAP) * 4; ring[o] = v[k * 4]; ring[o + 1] = v[k * 4 + 1]; ring[o + 2] = v[k * 4 + 2]; ring[o + 3] = v[k * 4 + 3]; }
+    if (now === 0 && haveFrom === 0) haveFrom = res.from;
+    now = Math.max(now, res.now);
+  }
+
+  function geom() {
+    const box = $('scope');
+    const W = box.clientWidth - 40, H = box.clientHeight;
+    const c = H / 2, s = (H / 2 - 12) / 1.15, T = dbToA(bandThr(sel)), z = V.zoom;
+    return { W, H, c, s, sz: s * z, cz: c + T * s * (z - 1), T };
+  }
+  function tickList(g) {
+    const out = []; let lastY = -Infinity;
+    [0, -1, -2, -3, -4.5, -6, -9, -12, -18, -24, -36, -48].forEach((db) => {
+      const y = g.cz - dbToA(db) * g.sz;
+      if (y < 8 || y > g.cz - 10 || y > g.H - 10 || y - lastY < 24) return;
+      out.push({ db, y }); lastY = y;
+    });
+    return out;
+  }
+  function prep(cv, w, h) {
+    const dpr = window.devicePixelRatio || 1;
+    const pw = Math.max(1, Math.round(w * dpr)), ph = Math.max(1, Math.round(h * dpr));
+    if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  }
+  function drawScope() {
+    const cv = $('scopeCv');
+    const g = geom(), W = Math.max(1, g.W), H = Math.max(1, g.H);
+    const ctx = prep(cv, W, H);
+    const Y = (v) => g.cz - v * g.sz;
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#161616'; ctx.lineWidth = 1;
+    tickList(g).forEach((t) => {
+      const a = dbToA(t.db);
+      [Y(a), Y(-a)].forEach((y) => { if (y > 0 && y < H) { ctx.beginPath(); ctx.moveTo(0, Math.round(y) + .5); ctx.lineTo(W, Math.round(y) + .5); ctx.stroke(); } });
+    });
+    if (g.cz > 0 && g.cz < H) { ctx.strokeStyle = '#1E1E1E'; ctx.beginPath(); ctx.moveTo(0, Math.round(g.cz) + .5); ctx.lineTo(W, Math.round(g.cz) + .5); ctx.stroke(); }
+    if (ring) {
+      const winE = Math.max(4, Math.round(V.timeWin * vizRate));
+      const cols = Math.floor(W), per = winE / cols;
+      const stride = Math.max(1, Math.floor(per / 48));
+      // FOLLOW on: the view follows the playhead (scrolling). Off: still view, sweeping playhead.
+      const sweep = !V.follow;
+      let base, phX = -1;
+      if (sweep) { base = now - (now % winE); phX = (now - base) / per; }
+      else base = now - winE;
+      const lo = Math.max(haveFrom, now - CAP + 1);
+      const cy = (y) => Math.max(-2, Math.min(H + 2, y));
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.fillStyle = pass === 0 ? accent : grey;
+        const oMin = pass === 0 ? 0 : 2;
+        for (let i = 0; i < cols; i++) {
+          if (sweep && i > phX && i <= phX + 6) continue;
+          const j0 = Math.floor(i * per), j1 = Math.max(j0 + 1, Math.floor((i + 1) * per));
+          let mn = Infinity, mx = -Infinity;
+          for (let j = j0; j < j1; j += stride) {
+            let t = base + j;
+            if (sweep && t >= now) t -= winE;
+            if (t < lo || t >= now) continue;
+            const o = (t % CAP) * 4 + oMin;
+            if (ring[o] < mn) mn = ring[o];
+            if (ring[o + 1] > mx) mx = ring[o + 1];
+          }
+          if (mx === -Infinity) continue;
+          const y0 = cy(Y(mx)), y1 = cy(Y(mn));
+          ctx.fillRect(i, y0, 1.2, Math.max(1, y1 - y0));
+        }
+      }
+      if (sweep) { ctx.fillStyle = 'rgba(230,230,230,0.7)'; ctx.fillRect(Math.floor(phX), 0, 1, H); }
+    }
+    ctx.strokeStyle = 'rgba(230,230,230,0.55)'; ctx.setLineDash([4, 4]); ctx.beginPath();
+    [Y(g.T), Y(-g.T)].forEach((y) => { if (y > 0 && y < H) { ctx.moveTo(0, Math.round(y) + .5); ctx.lineTo(W, Math.round(y) + .5); } });
+    ctx.stroke(); ctx.setLineDash([]);
+    if (V.frozen) { ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(0, 0, W, H); }
+  }
+  function renderOverlay() {
+    const g = geom();
+    $('ticks').innerHTML = tickList(g).map((t) => '<span class="tick" style="top:' + Math.round(t.y - 6) + 'px">' + (t.db === 0 ? '0' : minus + Math.abs(t.db)) + '</span>').join('');
+    const thr = $('thr');
+    thr.style.width = Math.max(0, g.W) + 'px';
+    thr.style.top = Math.round(g.c - g.T * g.s - 10) + 'px';
+    $('thrText').textContent = (nBands() > 1 ? 'B' + (sel + 1) + '  ' : '') + fmt(DEFS.threshold, bandThr(sel));
+    const tw = V.timeWin;
+    $('tTxt').textContent = tw < 1 ? Math.round(tw * 1000) + ' ms' : tw.toFixed(1) + ' s';
+    $('zTxt').textContent = (Math.round(V.zoom * 10) / 10) + '×';
+    const tv = Math.round(Math.log(tw / 0.05) / Math.log(120) * 1000);
+    const zv = Math.round(Math.log(V.zoom) / Math.log(16) * 1000);
+    if (Number($('tSl').value) !== tv) $('tSl').value = tv;
+    if (Number($('zSl').value) !== zv) $('zSl').value = zv;
+    $('tSl').style.setProperty('--p', (tv / 10) + '%');
+    $('zSl').style.setProperty('--p', (zv / 10) + '%');
+    const tag = $('scopeTag');
+    tag.style.display = nBands() > 1 ? 'block' : 'none';
+    tag.textContent = 'BAND ' + (sel + 1) + ' · ' + bandRange(sel);
+  }
+
+  (function () {
+    const thr = $('thr'); let drag = null;
+    thr.addEventListener('pointerdown', (e) => { try { thr.setPointerCapture(e.pointerId); } catch (_) {} const id = ID.thr + sel; drag = { y: e.clientY, a: dbToA(P[id]), id }; begin(id); });
+    thr.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const a = Math.max(0.0631, drag.a - (e.clientY - drag.y) / geom().s);
+      setParam(drag.id, 20 * Math.log10(a));
+    });
+    const stop = () => { if (drag) { end(drag.id); drag = null; } };
+    thr.addEventListener('pointerup', stop); thr.addEventListener('pointercancel', stop);
+    thr.addEventListener('dblclick', () => edit(ID.thr + sel, -6));
+    thr.addEventListener('keydown', (e) => {
+      const id = ID.thr + sel;
+      if (e.key === 'ArrowUp') { e.preventDefault(); edit(id, P[id] + 0.25); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); edit(id, P[id] - 0.25); }
+    });
+  })();
+
+  const setZoom = (z) => { V.zoom = Math.max(1, Math.min(16, z)); renderOverlay(); };
+  const setTime = (t) => { V.timeWin = Math.max(0.05, Math.min(6, t)); renderOverlay(); };
+  $('tSl').addEventListener('input', (e) => setTime(0.05 * Math.pow(120, Number(e.target.value) / 1000)));
+  $('zSl').addEventListener('input', (e) => setZoom(Math.pow(16, Number(e.target.value) / 1000)));
+  $('follow').onclick = () => { V.follow = !V.follow; $('follow').setAttribute('aria-pressed', V.follow ? 'true' : 'false'); };
+  $('freeze').onclick = () => { V.frozen = !V.frozen; $('freeze').setAttribute('aria-pressed', V.frozen ? 'true' : 'false'); };
+  $('fit').onclick = () => { V.zoom = 1; V.timeWin = 3; renderOverlay(); };
+  $('scope').addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    if (e.shiftKey) setTime(V.timeWin / f); else setZoom(V.zoom * f);
+  }, { passive: false });
+  // Spectral mode is planned; the switch is kept in the UI as agreed.
+  $('mSample').onclick = () => { $('mSample').setAttribute('aria-pressed', 'true'); $('mSpec').setAttribute('aria-pressed', 'false'); };
+  $('mSpec').onclick = () => { $('mSpec').setAttribute('aria-pressed', 'true'); $('mSample').setAttribute('aria-pressed', 'false'); };
+  $('mSpec').title = 'Spectral clipping is coming in a later version';
+
+  // ==========================================================================
+  // Multiband panel
+  // ==========================================================================
+  const FMIN = 20, FMAX = 20000;
+  const specBox = $('spec');
+  const fToX = (f, w) => Math.log(f / FMIN) / Math.log(FMAX / FMIN) * w;
+  const xToF = (x, w) => FMIN * Math.pow(FMAX / FMIN, Math.max(0, Math.min(1, x / w)));
+  const fmtHz = (f) => f >= 1000 ? (f >= 10000 ? Math.round(f / 1000) : (Math.round(f / 100) / 10)) + 'k' : Math.round(f) + '';
+  function bandRange(i) {
+    const xs = xovers();
+    const lo = i === 0 ? null : xs[i - 1], hi = i === xs.length ? null : xs[i];
+    if (lo == null && hi == null) return 'FULL';
+    if (lo == null) return '< ' + fmtHz(hi) + ' Hz';
+    if (hi == null) return '> ' + fmtHz(lo) + ' Hz';
+    return fmtHz(lo) + '–' + fmtHz(hi) + ' Hz';
+  }
+  const specW = () => specBox.clientWidth;
+  const specH = () => specBox.clientHeight;
+
+  function selectBand(i) {
+    sel = Math.max(0, Math.min(nBands() - 1, i));
+    engine.setSel(sel);
+    ringBand = -1; // refetch history for the new band
+    refreshAll();
+  }
+
+  // Write a whole band layout (crossovers + per-band settings) back to the plugin.
+  function writeLayout(xs, bands, solos) {
+    const ids = [ID.bands];
+    for (let i = 0; i < 3; i++) ids.push(ID.xover + i);
+    for (let b = 0; b < 4; b++) ids.push(ID.thr + b, ID.knee + b, ID.solo + b);
+    ids.forEach((id) => engine.gesture(id, true));
+    for (let i = 0; i < xs.length; i++) setParam(ID.xover + i, xs[i], { silent: true });
+    for (let b = 0; b < bands.length; b++) {
+      setParam(ID.thr + b, bands[b].thr, { silent: true });
+      setParam(ID.knee + b, bands[b].knee, { silent: true });
+      setParam(ID.solo + b, solos[b] ? 1 : 0, { silent: true });
+    }
+    for (let b = bands.length; b < 4; b++) setParam(ID.solo + b, 0, { silent: true });
+    setParam(ID.bands, bands.length, { silent: true });
+    ids.forEach((id) => engine.gesture(id, false));
+  }
+  function currentLayout() {
+    const n = nBands(), bands = [], solos = [];
+    for (let b = 0; b < n; b++) { bands.push({ thr: bandThr(b), knee: bandKnee(b) }); solos.push(soloOn(b)); }
+    return { xs: xovers(), bands, solos };
+  }
+
+  function addCrossover(f) {
+    const L = currentLayout();
+    if (L.xs.length >= 3) return -1;
+    f = Math.max(30, Math.min(16000, f));
+    let i = 0; while (i < L.xs.length && L.xs[i] < f) i++;
+    if ((i > 0 && f / L.xs[i - 1] < 1.26) || (i < L.xs.length && L.xs[i] / f < 1.26)) return -1;
+    L.xs.splice(i, 0, f);
+    L.bands.splice(i, 0, { thr: L.bands[i].thr, knee: L.bands[i].knee });
+    L.solos.splice(i, 0, L.solos[i]);
+    const newSel = sel + (sel > i ? 1 : 0);
+    writeLayout(L.xs, L.bands, L.solos);
+    selectBand(i === sel ? i : newSel);
+    return i;
+  }
+  function removeCrossover(i) {
+    const L = currentLayout();
+    if (i < 0 || i >= L.xs.length) return;
+    L.xs.splice(i, 1);
+    L.bands.splice(i + 1, 1);     // merged band keeps the lower band's settings
+    L.solos.splice(i + 1, 1);
+    writeLayout(L.xs, L.bands, L.solos);
+    selectBand(sel > i ? sel - 1 : sel);
+  }
+  function moveCrossover(i, f) {
+    const xs = xovers();
+    const lo = i > 0 ? xs[i - 1] * 1.26 : 30, hi = i < xs.length - 1 ? xs[i + 1] / 1.26 : 16000;
+    setParam(ID.xover + i, Math.max(lo, Math.min(hi, f)));
+  }
+
+  let xoEls = [], bandEls = [], soloEls = [], layoutKey = '';
+  function renderBands() {
+    const n = nBands(), multi = n > 1;
+    const key = n + ':' + sel + ':' + [0, 1, 2, 3].map((b) => soloOn(b) ? 1 : 0).join('');
+    if (key !== layoutKey) {
+      layoutKey = key;
+      const layer = $('bandLayer');
+      layer.innerHTML = '';
+      bandEls = []; xoEls = []; soloEls = [];
+      for (let i = 0; i < n; i++) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'band';
+        b.setAttribute('aria-pressed', i === sel ? 'true' : 'false');
+        b.innerHTML = multi ? '<span>' + (i + 1) + '</span>' : '';
+        b.addEventListener('click', () => selectBand(i));
+        layer.appendChild(b); bandEls.push(b);
+        if (multi) {
+          const sb = document.createElement('button');
+          sb.type = 'button'; sb.className = 'solo'; sb.textContent = 'S';
+          sb.setAttribute('aria-pressed', soloOn(i) ? 'true' : 'false');
+          sb.setAttribute('aria-label', 'Solo band ' + (i + 1));
+          sb.addEventListener('pointerdown', (e) => e.stopPropagation());
+          sb.addEventListener('click', (e) => { e.stopPropagation(); edit(ID.solo + i, soloOn(i) ? 0 : 1); });
+          layer.appendChild(sb); soloEls.push(sb);
+        }
+      }
+      for (let i = 0; i < n - 1; i++) {
+        const h = document.createElement('button');
+        h.type = 'button'; h.className = 'xo';
+        h.innerHTML = '<span></span>';
+        let drag = false;
+        h.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; e.stopPropagation(); try { h.setPointerCapture(e.pointerId); } catch (_) {} drag = true; begin(ID.xover + i); });
+        h.addEventListener('pointermove', (e) => { if (drag) moveCrossover(i, xToF(localX(e), specW())); });
+        const stop = () => { if (drag) { drag = false; end(ID.xover + i); } };
+        h.addEventListener('pointerup', stop); h.addEventListener('pointercancel', stop);
+        h.addEventListener('dblclick', (e) => { e.stopPropagation(); removeCrossover(i); });
+        h.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e, i); });
+        h.addEventListener('keydown', (e) => {
+          const xs = xovers();
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); engine.gesture(ID.xover + i, true); moveCrossover(i, xs[i] / (e.shiftKey ? 1.01 : 1.05)); engine.gesture(ID.xover + i, false); }
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); engine.gesture(ID.xover + i, true); moveCrossover(i, xs[i] * (e.shiftKey ? 1.01 : 1.05)); engine.gesture(ID.xover + i, false); }
+          if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeCrossover(i); }
+        });
+        layer.appendChild(h); xoEls.push(h);
+      }
+      $('edgeL').hidden = n >= 4;
+      $('edgeR').hidden = n >= 4;
+    }
+    positionBands();
+  }
+  function positionBands() {
+    const w = specW(), xs = xovers();
+    const edges = [0].concat(xs.map((f) => fToX(f, w))).concat([w]);
+    bandEls.forEach((b, i) => {
+      b.style.left = edges[i] + 'px'; b.style.width = Math.max(0, edges[i + 1] - edges[i]) + 'px';
+      b.setAttribute('aria-label', 'Band ' + (i + 1) + ', ' + bandRange(i));
+      if (soloEls[i]) soloEls[i].style.left = edges[i + 1] + 'px';
+    });
+    xoEls.forEach((h, i) => {
+      const x = fToX(xs[i], w);
+      h.style.left = x + 'px';
+      h.classList.toggle('flip', x > w - 46);
+      h.querySelector('span').textContent = fmtHz(xs[i]);
+      h.setAttribute('aria-label', 'Crossover ' + (i + 1) + ', ' + fmtHz(xs[i]) + ' Hz. Arrow keys move it, Delete removes it');
+    });
+    $('mbHead').innerHTML = nBands() > 1 ? 'BAND <span class="sel">' + (sel + 1) + ' · ' + bandRange(sel) + '</span>' : 'BANDS <span class="sel">· OFF</span>';
+    const s = SLOPES[Math.round(P[ID.slope])] || 24;
+    document.querySelectorAll('.slope button').forEach((o) => o.setAttribute('aria-pressed', Number(o.dataset.s) === s ? 'true' : 'false'));
+  }
+  function localX(e) { const r = specBox.getBoundingClientRect(); return (e.clientX - r.left) / scale; }
+  function edgeDrag(btn, startF) {
+    let idx = -1;
+    btn.addEventListener('pointerdown', (e) => {
+      try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+      idx = addCrossover(xToF(localX(e), specW()));
+      if (idx < 0) idx = addCrossover(startF);
+      if (idx >= 0) begin(ID.xover + idx);
+    });
+    btn.addEventListener('pointermove', (e) => { if (idx >= 0) moveCrossover(idx, xToF(localX(e), specW())); });
+    const stop = () => { if (idx >= 0) end(ID.xover + idx); idx = -1; };
+    btn.addEventListener('pointerup', stop); btn.addEventListener('pointercancel', stop);
+    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addCrossover(startF); } });
+  }
+  edgeDrag($('edgeL'), 60);
+  edgeDrag($('edgeR'), 8000);
+
+  let ctxF = 1000, ctxIdx = -1;
+  function openCtx(e, xoIdx) {
+    const r = specBox.getBoundingClientRect();
+    const x = (e.clientX - r.left) / scale, y = (e.clientY - r.top) / scale;
+    ctxF = xToF(x, specW()); ctxIdx = xoIdx;
+    $('ctxAdd').disabled = nBands() >= 4 || xoIdx >= 0;
+    $('ctxDel').disabled = xoIdx < 0;
+    $('ctxReset').disabled = nBands() === 1;
+    const m = $('ctx');
+    m.style.display = 'flex';
+    m.style.left = Math.max(0, Math.min(x, specW() - 124)) + 'px';
+    m.style.top = Math.max(0, Math.min(y, specH() - 84)) + 'px';
+    const first = m.querySelector('button:not([disabled])');
+    if (first) first.focus();
+  }
+  const closeCtx = () => { $('ctx').style.display = 'none'; };
+  specBox.addEventListener('contextmenu', (e) => { e.preventDefault(); openCtx(e, -1); });
+  let lpTimer = 0;
+  specBox.addEventListener('pointerdown', (e) => {
+    if ($('ctx').contains(e.target)) return;
+    closeCtx();
+    if (e.pointerType === 'touch') { clearTimeout(lpTimer); lpTimer = setTimeout(() => openCtx(e, -1), 550); }
+  });
+  ['pointerup', 'pointercancel'].forEach((t) => specBox.addEventListener(t, () => clearTimeout(lpTimer)));
+  document.addEventListener('pointerdown', (e) => { if (!specBox.contains(e.target)) closeCtx(); });
+  $('ctx').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
+  $('ctxAdd').onclick = () => { addCrossover(ctxF); closeCtx(); };
+  $('ctxDel').onclick = () => { removeCrossover(ctxIdx); closeCtx(); };
+  $('ctxReset').onclick = () => {
+    const L = currentLayout();
+    writeLayout([], [L.bands[sel]], [false]);
+    selectBand(0);
+    closeCtx();
+  };
+  document.querySelectorAll('.slope button').forEach((b) => {
+    b.onclick = () => edit(ID.slope, SLOPES.indexOf(Number(b.dataset.s)));
+  });
+
+  // ---------- spectrum ----------
+  const FFTN = 2048;
+  const hann = new Float32Array(FFTN);
+  for (let i = 0; i < FFTN; i++) hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FFTN - 1));
+  const re = new Float32Array(FFTN), im = new Float32Array(FFTN);
+  const specDb = new Float32Array(FFTN / 2).fill(-120);
+  function fft() {
+    const n = FFTN;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let j = 0; j < len / 2; j++) {
+          const a = i + j, b = a + len / 2;
+          const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+        }
+      }
+    }
+  }
+  function analyse(samples, dt) {
+    for (let i = 0; i < FFTN; i++) { re[i] = (samples[i] || 0) * hann[i]; im[i] = 0; }
+    fft();
+    for (let k = 1; k < FFTN / 2; k++) {
+      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]) / (FFTN / 4);
+      const db = 20 * Math.log10(mag + 1e-9) + 4.5 * Math.log2(k * engineSr / FFTN / 1000);  // +4.5 dB/oct tilt so mixes read flat
+      specDb[k] = db > specDb[k] ? specDb[k] + (db - specDb[k]) * 0.6 : Math.max(db, specDb[k] - 40 * dt);
+    }
+  }
+  function drawSpectrum() {
+    const cv = $('specCv'), w = specW(), h = specH();
+    const ctx = prep(cv, w, h);
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, w, h);
+    const xs = xovers(), n = nBands();
+    if (n > 1) {
+      const lo = sel === 0 ? 0 : fToX(xs[sel - 1], w), hi = sel === xs.length ? w : fToX(xs[sel], w);
+      ctx.fillStyle = 'rgba(' + accentRGB.join(',') + ',0.10)'; ctx.fillRect(lo, 0, hi - lo, h);
+      ctx.fillStyle = accent; ctx.fillRect(lo, 0, hi - lo, 2);
+    }
+    ctx.fillStyle = '#151515';
+    [100, 1000, 10000].forEach((f) => ctx.fillRect(Math.round(fToX(f, w)), 0, 1, h));
+    ctx.fillStyle = '#5E5E5E'; ctx.font = '8px "Sui Generis", sans-serif';
+    [[100, '100'], [1000, '1k'], [10000, '10k']].forEach(([f, t]) => ctx.fillText(t, fToX(f, w) + 3, 10));
+    const yOf = (db) => h - 14 - (Math.max(-72, Math.min(6, db)) + 72) / 78 * (h - 22);
+    ctx.beginPath(); ctx.moveTo(0, h);
+    let lastX = -1;
+    for (let k = 1; k < FFTN / 2; k++) {
+      const f = k * engineSr / FFTN;
+      if (f < FMIN || f > FMAX) continue;
+      const x = fToX(f, w);
+      if (x - lastX < 1 && k < FFTN / 2 - 1) continue;
+      ctx.lineTo(x, yOf(specDb[k])); lastX = x;
+    }
+    ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = 'rgba(138,138,138,0.35)'; ctx.fill();
+    ctx.strokeStyle = '#9A9A9A'; ctx.lineWidth = 1; ctx.stroke();
+    if (n > 1 && [0, 1, 2, 3].some((b) => b < n && soloOn(b))) {
+      ctx.fillStyle = 'rgba(7,7,7,0.62)';
+      for (let i = 0; i < n; i++) {
+        if (soloOn(i)) continue;
+        const lo = i === 0 ? 0 : fToX(xs[i - 1], w), hi = i === xs.length ? w : fToX(xs[i], w);
+        ctx.fillRect(lo, 0, hi - lo, h);
+      }
+    }
+  }
+
+  function drawCurve() {
+    const T = dbToA(bandThr(sel)), k = bandKnee(sel) / 100;
+    const clip = (x) => { const a = Math.abs(x), ks = T * (1 - k); if (a <= ks) return x; if (k <= 1e-4) return Math.sign(x) * T; const w = T - ks; return Math.sign(x) * (ks + w * Math.tanh((a - ks) / w)); };
+    const cv = $('curveCv'), S = window.innerWidth <= 820 ? 70 : 84, pad = 7, inner = S - pad * 2, maxIn = 1.25;
+    const ctx = prep(cv, S, S);
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, S, S);
+    const X = (v) => pad + v / maxIn * inner, Y = (v) => S - pad - v / maxIn * inner;
+    ctx.strokeStyle = '#1C1C1C'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(T)); ctx.lineTo(X(maxIn), Y(T)); ctx.stroke();
+    ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(maxIn), Y(maxIn)); ctx.stroke();
+    ctx.strokeStyle = grey; ctx.lineWidth = 2.5; ctx.beginPath();
+    for (let i = 0; i <= 80; i++) { const v = i / 80 * maxIn, y = clip(v); if (i === 0) ctx.moveTo(X(v), Y(y)); else ctx.lineTo(X(v), Y(y)); }
+    ctx.stroke();
+  }
+
+  // ---------- meters ----------
+  const mIn = { level: -120, hold: -120, holdAt: 0 }, mOut = { level: -120, hold: -120, holdAt: 0 };
+  function updMeter(m, peak, dt, t) {
+    const db = peak > 1e-6 ? 20 * Math.log10(peak) : -120;
+    m.level = db > m.level ? db : Math.max(db, m.level - 24 * dt);
+    if (db >= m.hold || t - m.holdAt > 1500) { m.hold = Math.max(db, m.level); m.holdAt = t; }
+  }
+  const meterY = (db, h) => h - (Math.max(-48, Math.min(6, db)) + 48) / 54 * h;
+  function drawMeter(cv, m) {
+    const w = 20, h = Math.max(40, cv.parentNode.clientHeight - 36 - 2);
+    const ctx = prep(cv, w, h);
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, w, h);
+    const y0 = meterY(0, h), yl = meterY(m.level, h);
+    ctx.fillStyle = '#9A9A9A';
+    const yb = Math.max(yl, y0);
+    if (yb < h) ctx.fillRect(3, yb, w - 6, h - yb);
+    if (yl < y0) { ctx.fillStyle = accent; ctx.fillRect(3, yl, w - 6, y0 - yl); }
+    if (m.hold > -48) { ctx.fillStyle = m.hold > 0 ? accent : '#E6E6E6'; ctx.fillRect(3, Math.round(meterY(m.hold, h)), w - 6, 2); }
+    ctx.fillStyle = '#3A3A3A';
+    [0, -6, -12, -24].forEach((db) => { const y = Math.round(meterY(db, h)); ctx.fillRect(0, y, 2, 1); ctx.fillRect(w - 2, y, 2, 1); });
+  }
+  const fmtPk = (db) => db <= -60 ? minus + '∞' : ((Math.round(db * 10) / 10 > 0 ? '+' : (db < -0.05 ? minus : '')) + Math.abs(Math.round(db * 10) / 10).toFixed(1));
+
+  // ---------- accent color picker (hidden: click the 400SCALPER wordmark) ----------
+  const hsv2rgb = (h, s, v) => {
+    const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return [f(5), f(3), f(1)].map((x) => Math.round(x * 255));
+  };
+  const rgb2hsv = (r, g, b) => {
+    r /= 255; g /= 255; b /= 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    let h = 0;
+    if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [(h * 60 + 360) % 360, mx ? d / mx : 0, mx];
+  };
+  const toHex = (rgb) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+  const fromHex = (hx) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(hx).trim()); if (!m) return null; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+  let H = 0, S = 1, Vv = 1, accentSaveTimer = 0;
+  function applyAccent(rgb, from) {
+    accentRGB = rgb; accent = toHex(rgb);
+    document.documentElement.style.setProperty('--accent', accent);
+    if (from !== 'hex') $('hexIn').value = accent;
+    if (from !== 'wheel' && from !== 'val') { [H, S, Vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); $('valSl').value = Math.round(Vv * 100); drawWheel(); }
+    placeMarker();
+    if (from && from !== 'init' && engine) { clearTimeout(accentSaveTimer); accentSaveTimer = setTimeout(() => engine.setAccent(accent), 250); }
+  }
+  function drawWheel() {
+    const cv = $('wheelCv'), N = 184, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const px = Math.round(N * dpr);
+    cv.width = px; cv.height = px;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(px, px), r0 = px / 2;
+    for (let y = 0; y < px; y++) for (let x = 0; x < px; x++) {
+      const dx = x - r0 + .5, dy = y - r0 + .5, r = Math.sqrt(dx * dx + dy * dy) / r0;
+      const o = (y * px + x) * 4;
+      if (r > 1) { img.data[o + 3] = 0; continue; }
+      const c = hsv2rgb((Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360, r, Vv);
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2];
+      img.data[o + 3] = r > 0.985 ? Math.round((1 - r) / 0.015 * 255) : 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  function placeMarker() {
+    const a = (H - 90) * Math.PI / 180, r = S * 92, mk = $('wheelMk');
+    mk.style.left = (92 + r * Math.cos(a)) + 'px'; mk.style.top = (92 + r * Math.sin(a)) + 'px';
+    mk.style.background = accent;
+  }
+  (function () {
+    const wh = $('wheel'); let drag = false;
+    const pick = (e) => {
+      const r = wh.getBoundingClientRect();
+      const dx = (e.clientX - r.left) - 92, dy = (e.clientY - r.top) - 92;
+      H = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
+      S = Math.min(1, Math.sqrt(dx * dx + dy * dy) / 92);
+      applyAccent(hsv2rgb(H, S, Vv), 'wheel');
+    };
+    wh.addEventListener('pointerdown', (e) => { try { wh.setPointerCapture(e.pointerId); } catch (_) {} drag = true; pick(e); });
+    wh.addEventListener('pointermove', (e) => { if (drag) pick(e); });
+    const stop = () => { drag = false; };
+    wh.addEventListener('pointerup', stop); wh.addEventListener('pointercancel', stop);
+    $('valSl').addEventListener('input', (e) => { Vv = Number(e.target.value) / 100; drawWheel(); applyAccent(hsv2rgb(H, S, Vv), 'val'); });
+    $('hexIn').addEventListener('input', (e) => { const rgb = fromHex(e.target.value); if (rgb) { [H, S, Vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); $('valSl').value = Math.round(Vv * 100); drawWheel(); applyAccent(rgb, 'hex'); } });
+    $('accReset').onclick = () => applyAccent(fromHex(DEFAULT_ACCENT), 'reset');
+    const pop = $('pop'), wb = $('wbtn');
+    const setOpen = (o) => { pop.classList.toggle('open', o); wb.setAttribute('aria-expanded', o ? 'true' : 'false'); if (o) drawWheel(); };
+    wb.addEventListener('click', (e) => { e.stopPropagation(); setOpen(!pop.classList.contains('open')); });
+    document.addEventListener('pointerdown', (e) => { if (!pop.contains(e.target) && !wb.contains(e.target)) setOpen(false); });
+    pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setOpen(false); wb.focus(); } });
+  })();
+
+  // ==========================================================================
+  // Build + main loop
+  // ==========================================================================
+  $('slotIn').appendChild(buildKnob('inGain'));
+  const rest = $('slotRest');
+  rest.appendChild(buildKnob('threshold'));
+  rest.appendChild(buildKnob('knee'));
+  const cw = document.createElement('div');
+  cw.className = 'curve';
+  cw.innerHTML = '<span>CURVE</span><canvas id="curveCv" aria-hidden="true"></canvas>';
+  rest.appendChild(cw);
+  rest.appendChild(buildKnob('outGain'));
+
+  function refreshAll() {
+    if (sel >= nBands()) { sel = nBands() - 1; engine.setSel(sel); ringBand = -1; }
+    renderKnobs(); renderBands(); renderOverlay();
+  }
+
+  let lastFrame = performance.now(), lastTxt = 0, inFlight = false, lastW = 0, lastH = 0;
+  async function tick() {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      const band = sel;
+      const fresh = ringBand !== band;
+      if (fresh) { resetRing(); ringBand = band; }
+      const want = Math.ceil(vizRate * 6.5);
+      const res = await engine.poll(band, fresh ? 0 : now, want, true);
+      const t = performance.now(), dt = Math.min(0.1, (t - lastFrame) / 1000); lastFrame = t;
+      if (res.sr && res.sr !== engineSr) { engineSr = res.sr; }
+      // host-side parameter changes (automation, preset load)
+      let changed = false;
+      ORDER.forEach((id, i) => { const v = res.p[i]; if (!dragging.has(id) && v !== undefined && Math.abs(v - P[id]) > 1e-9) { P[id] = v; changed = true; } });
+      if (changed) refreshAll();
+      if (!V.frozen) {
+        if (fresh) { now = res.from; haveFrom = res.from; }
+        ingest(res, band);
+        updMeter(mIn, res.mi, dt, t); updMeter(mOut, res.mo, dt, t);
+        if (res.f) analyse(res.f, dt);
+      }
+      const box = $('scope');
+      if (box.clientWidth !== lastW || box.clientHeight !== lastH) { lastW = box.clientWidth; lastH = box.clientHeight; renderOverlay(); positionBands(); }
+      drawScope(); drawCurve(); drawSpectrum();
+      drawMeter($('meterIn'), mIn); drawMeter($('meterOut'), mOut);
+      if (!V.frozen && t - lastTxt > 120) {
+        lastTxt = t;
+        let gr = 0;
+        const span = Math.min(now - haveFrom, Math.round(vizRate * 0.3));
+        for (let i = 1; i <= span; i++) {
+          const o = ((now - i) % CAP) * 4;
+          const a = Math.max(Math.abs(ring[o]), Math.abs(ring[o + 1])), b = Math.max(Math.abs(ring[o + 2]), Math.abs(ring[o + 3]));
+          if (a > 1e-4 && b > 1e-5 && a > b) { const d = 20 * Math.log10(a / b); if (d > gr) gr = d; }
+        }
+        $('grText').textContent = gr > 0.05 ? minus + gr.toFixed(1) + ' dB' : '0.0 dB';
+        $('clipLbl').textContent = nBands() > 1 ? 'CLIP B' + (sel + 1) : 'CLIP';
+        $('clipDot').style.background = gr > 0.1 ? accent : '#2A2A2A';
+        $('inPk').textContent = fmtPk(mIn.hold);
+        $('outPk').textContent = fmtPk(mOut.hold);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      inFlight = false;
+    }
+  }
+  function loop() { tick(); requestAnimationFrame(loop); }
+
+  async function start() {
+    // Inside the plugin the native functions are bound once the web view is ready; wait for them.
+    const inPlugin = () => !!window.__SCALPER_PLUGIN__;
+    const t0 = performance.now();
+    while (typeof window.scalperInit !== 'function') {
+      const waited = performance.now() - t0;
+      if (!inPlugin() && waited > 400) break;
+      if (inPlugin() && waited > 10000) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    engine = typeof window.scalperInit === 'function' ? NativeEngine : makeSimEngine();
+    document.documentElement.dataset.engine = engine.name;
+    const init = await engine.init();
+    init.params.forEach((p) => { PDEF[p.id] = { min: p.min, max: p.max, def: p.def }; P[p.id] = p.v; });
+    sel = Math.max(0, Math.min(nBands() - 1, init.sel || 0));
+    vizRate = init.vizRate || 12000; engineSr = init.sr || 48000;
+    applyAccent(fromHex(init.accent) || fromHex(DEFAULT_ACCENT), 'init');
+    refreshAll();
+    loop();
+  }
+  start();
+})();
+</script>
+</body>
+</html>
