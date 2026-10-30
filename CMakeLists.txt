@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(400Scalper VERSION 0.1.0 LANGUAGES CXX)
+project(400Scalper VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -82,6 +82,10 @@ if(SCALPER_BUILD_TESTS)
   add_executable(dsp_test tests/dsp_test.cpp)
   target_include_directories(dsp_test PRIVATE src)
   add_test(NAME dsp_test COMMAND dsp_test)
+
+  add_executable(spectral_test tests/spectral_test.cpp)
+  target_include_directories(spectral_test PRIVATE src)
+  add_test(NAME spectral_test COMMAND spectral_test)
 
   add_executable(host_test tests/host_test.cpp src/Plugin.cpp src/GuiJson.cpp)
   add_dependencies(host_test scalper_ui_resources)

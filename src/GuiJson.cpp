@@ -51,7 +51,14 @@ std::string Gui::pollJson (Plugin& p, int band, double since, int maxEntries, bo
     s += ",\"sr\":"; appendNum (s, p.currentSampleRate.load());
     s += ",\"p\":[";
     for (int i = 0; i < kNumParams; ++i) { if (i) s += ','; appendNum (s, p.values[i].load (std::memory_order_relaxed)); }
-    s += "],\"mi\":"; appendNum (s, p.meterIn.take());
+    s += "],\"am\":"; s += std::to_string (p.procMode.load());
+    if (p.procMode.load() == 1)
+    {
+        s += ",\"sm\":[";
+        for (int i = 0; i < SpectralSplitter::kDisplayPoints; ++i) { if (i) s += ','; appendNum (s, p.spectral.displayMask[size_t (i)].load (std::memory_order_relaxed)); }
+        s += ']';
+    }
+    s += ",\"mi\":"; appendNum (s, p.meterIn.take());
     s += ",\"mo\":"; appendNum (s, p.meterOut.take());
     s += ",\"v\":[";
     bool first = true;

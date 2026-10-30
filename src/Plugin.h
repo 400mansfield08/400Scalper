@@ -8,6 +8,7 @@
 #include "Params.h"
 #include "Shared.h"
 #include "dsp/Engine.h"
+#include "dsp/Spectral.h"
 
 namespace scalper {
 
@@ -51,6 +52,9 @@ public:
     PeakMeter meterIn, meterOut;
     std::atomic<int> selectedBand { 0 };
     std::atomic<double> currentSampleRate { 48000.0 };
+    std::atomic<int> activeMode { 0 };          // mode whose latency was reported to the host (set in activate)
+    std::atomic<int> procMode { 0 };            // mode the audio is actually running right now
+    SpectralSplitter spectral;                   // also read by the UI (display mask)
     void uiSetParam (clap_id id, double value);   // UI thread
     void uiGesture (clap_id id, bool begin);      // UI thread
 
@@ -64,6 +68,14 @@ private:
 
     double sampleRate = 48000.0;
     ChannelEngine engines[2];
+    SpectralClipChannel specClip[2];
+    IntDelay specVizIn[2];
+    IntDelay deltaDelay[2];                      // twin -> aligned with the look-ahead ceiling's delay                       // aligns the spectral-mode "input" trace with the output
+    double detailSm = 1.0;
+    bool restartRequested = false;
+    int pendingMode = -1;
+    double modeGain = 1.0, modeFadeStep = 0.002;
+    void resetEngines();
     StereoCeiling ceiling;
 
     // smoothed values

@@ -78,6 +78,21 @@ struct AdaaClipper
         x1 = x; F1 = Fx;
         return y;
     }
+
+    // Same, for a curve that may change every sample (Spectral mode): both antiderivative
+    // terms are evaluated with the *current* curve, so a parameter change can never be
+    // divided by a tiny dx and spike.
+    double processVarying (const ClipCurve& c, double x)
+    {
+        const double dx = x - x1;
+        double y;
+        if (std::fabs (dx) < 1.0e-6)
+            y = c.f (0.5 * (x + x1));
+        else
+            y = (c.F (x) - c.F (x1)) / dx;
+        x1 = x; F1 = 0.0;
+        return y;
+    }
 };
 
 // 3-tap symmetric FIR that undoes the ADAA two-point-average droop across the audio

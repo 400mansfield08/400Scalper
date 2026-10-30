@@ -5,13 +5,19 @@ A transparent soft-knee clipper, as a CLAP plugin. Made for Always 400.
 - **In / Out gain, Threshold, Knee**: per-sample soft-knee clipping, which becomes a hard clip at Knee 0.
 - **Clean clipping**: the clipper runs at 4× oversampling with antiderivative anti-aliasing (ADAA), which removes the harsh-sounding artifacts clipping normally causes. In tests, these artifacts sit about 105 dB below the signal, compared with about 26 dB for a plain clipper.
 - **Hard ceiling**: a stereo-linked, 0.7 ms look-ahead stage follows the clipper. It stops the small overshoots that oversampling adds from passing the threshold, without putting the artifacts back.
-- **Optional multiband**: up to 4 bands, with crossovers at 6, 12 or 24 dB/oct (first-order, Linkwitz-Riley 2 or Linkwitz-Riley 4). The bands sum back flat, within 0.02 dB. Each band has its own Threshold, Knee and Solo.
+- **Two modes**, switched with SAMPLE / SPECTRAL at the top:
+  - **Sample**: the per-sample clipper described above.
+  - **Spectral**: a detail-preserving clipper. A 26-band ear-shaped (Mel) filter bank works out which parts of the sound are loud and which are quiet detail. Only the loud part is clipped; the **DETAIL** knob (0–100 %) sets how much of the quiet detail rides through untouched. Nothing passes the threshold. In tests, 100 % of a quiet 4 kHz tone survives under a hard-clipped 60 Hz tone, against 26 % with the plain clipper. Delay: 579 samples at 48 kHz (12 ms).
+  - Only one mode runs at a time. The audio switches immediately with a 10 ms fade out and in, and the other engine is stopped and reset. The two modes have different delays, so the plugin also asks the host to restart it to update its delay compensation.
+  - The Spectral **SPECTRUM** display sits left of OUT. The accent color shows what's being clipped, and the opposite hue shows the detail being kept. The DETAIL knob uses the same opposite hue.
+- **Δ DELTA** (above THRESHOLD, both modes): listen to only what the clipper removes. Each engine runs an unclipped twin of the signal through exactly the same filters, so Delta is truly silent (−156 dBFS in tests) when nothing is clipping. Delta is a monitoring control and isn't saved.
+- **Optional multiband** (Sample mode): up to 4 bands, with crossovers at 6, 12 or 24 dB/oct (first-order, Linkwitz-Riley 2 or Linkwitz-Riley 4). The bands sum back flat, within 0.02 dB. Each band has its own Threshold, Knee and Solo.
 - **UI**: the v5 interface runs in an embedded web view (WebView2 on Windows):
   - live scope with the orange input behind the grey output, plus TIME/ZOOM, FOLLOW and FREEZE
   - IN/OUT meters
   - spectrum and band editor
   - accent-color picker (click the wordmark)
-- **Latency**: 68 samples at 48 kHz (1.4 ms), reported to the host so it can compensate.
+- **Latency**: Sample mode 68 samples at 48 kHz (1.4 ms); Spectral mode 579 samples (12 ms). Both are reported to the host so it can compensate.
 
 ## Get the plugin (Windows)
 
@@ -43,14 +49,15 @@ ctest --test-dir build -C Release
 | `src/dsp/Oversampler.h` | 4× linear-phase polyphase halfband oversampler |
 | `src/dsp/Crossover.h` | 6/12/24 dB multiband splitter with allpass alignment |
 | `src/dsp/Engine.h` | Per-channel engine and the look-ahead ceiling |
+| `src/dsp/Spectral.h` | Spectral mode: STFT ear filter bank, loud/detail split, detail-preserving clip |
 | `src/Plugin.*` | CLAP plugin: params, state, latency, processing |
 | `src/Gui.cpp`, `src/GuiJson.cpp` | Web view window and the JSON bridge to the UI |
 | `ui/index.html` | The UI. It also opens in a browser, where a simulated engine stands in for preview. |
-| `tests/` | DSP tests and a minimal CLAP host test |
+| `tests/` | DSP tests, Spectral mode tests and a minimal CLAP host test |
+| `prototypes/spectral/` | The JavaScript prototype of Spectral mode, its tests and the v7 review page |
 
 ## Notes
 
-- **Spectral mode**: the SPECTRAL switch is in the UI, but spectral clipping is planned for a later version.
 - **Solo**: Solo is a monitoring control and is not saved with the session.
 - **Accent color**: the accent color is a global preference, stored in `%APPDATA%\400Scalper\settings.txt`.
 - **Font license**: the UI font (Sui Generis, Typodermic) is embedded in the binary. Check that its license allows embedding before a public release.

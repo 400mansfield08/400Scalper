@@ -33,6 +33,8 @@ static double gainDb (const std::vector<double>& in, const std::vector<double>& 
     return 20.0 * std::log10 (std::abs (bin (out, f, fs, start)) / std::abs (bin (in, f, fs, start)));
 }
 
+static double tw_ = 0.0;
+
 int main()
 {
     const double fs = 48000.0;
@@ -71,7 +73,7 @@ int main()
             for (size_t n = 0; n < in.size(); ++n)
             {
                 in[n] = 0.25 * std::sin (2 * PI * f * double (n) / fs); // -12 dBFS, threshold 0 dBFS, knee starts at 0.7
-                out[n] = eng.process (in[n], 1, 24, c, s, bi, bo);
+                out[n] = eng.process (in[n], 1, 24, c, s, bi, bo, tw_);
             }
             const double g = gainDb (in, out, f, fs);
             CHECK (std::fabs (g) < 0.1, "engine transparent at %.0f Hz: %+.4f dB", f, g);
@@ -94,7 +96,7 @@ int main()
                 seed = seed * 1103515245u + 12345u;
                 const double noise = ((seed >> 9) / double (1u << 23) - 0.5);
                 const double x = 2.0 * std::sin (2 * PI * 997.0 * n / fs) + 0.5 * std::sin (2 * PI * 7300.0 * n / fs) + noise;
-                double l = eng.process (x, 1, 24, c, s, bi, bo), r = l;
+                double l = eng.process (x, 1, 24, c, s, bi, bo, tw_), r = l;
                 ceil.process (l, r, 0.5, true);
                 mx = std::max (mx, std::fabs (l));
             }
@@ -117,7 +119,7 @@ int main()
             for (size_t n = 0; n < in.size(); ++n)
             {
                 in[n] = 0.3 * std::sin (2 * PI * f * double (n) / fs);
-                out[n] = eng.process (in[n], 4, slope, c, s, bi, bo);
+                out[n] = eng.process (in[n], 4, slope, c, s, bi, bo, tw_);
             }
             worst = std::max (worst, std::fabs (gainDb (in, out, f, fs)));
         }
@@ -138,7 +140,7 @@ int main()
             {
                 const double x = 1.0 * std::sin (2 * PI * f * double (n) / fs);
                 if (mode == 0) { out[n] = std::clamp (x, -0.25, 0.25); continue; }
-                double l = eng.process (x, 1, 24, c, s, bi, bo), r = l;
+                double l = eng.process (x, 1, 24, c, s, bi, bo, tw_), r = l;
                 ceil.process (l, r, 0.25, mode == 2);
                 out[n] = l;
             }
