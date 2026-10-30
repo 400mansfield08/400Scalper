@@ -6,43 +6,8 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
-#include <clap/clap.h>
 
 namespace scalper {
-
-// Single-producer / single-consumer queue of UI -> host parameter events.
-struct UiEvent
-{
-    enum Type : uint8_t { Value, Begin, End } type;
-    clap_id id;
-    double value;
-};
-
-class UiEventQueue
-{
-public:
-    bool push (const UiEvent& e)
-    {
-        const uint32_t w = write.load (std::memory_order_relaxed);
-        const uint32_t next = (w + 1) % kSize;
-        if (next == read.load (std::memory_order_acquire)) return false; // full
-        buf[w] = e;
-        write.store (next, std::memory_order_release);
-        return true;
-    }
-    bool pop (UiEvent& e)
-    {
-        const uint32_t r = read.load (std::memory_order_relaxed);
-        if (r == write.load (std::memory_order_acquire)) return false;
-        e = buf[r];
-        read.store ((r + 1) % kSize, std::memory_order_release);
-        return true;
-    }
-private:
-    static constexpr uint32_t kSize = 2048;
-    UiEvent buf[kSize] {};
-    std::atomic<uint32_t> write { 0 }, read { 0 };
-};
 
 // Decimated min/max history for the scope, one ring per band.
 // Each entry covers kDecim samples: input min/max (pre-clip, latency aligned) and output min/max.
