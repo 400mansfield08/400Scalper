@@ -280,18 +280,20 @@ class SpectralClipChannel
 public:
     void prepare (double fs)
     {
-        osR.reset(); osD.reset(); clip.reset(); comp.reset(); d1 = 0.0; env = 0.0;
+        reset();
         comp.prepare (fs * Oversampler4x::factor);
+        compTwin.prepare (fs * Oversampler4x::factor);
         envRel = std::exp (-1.0 / (0.015 * fs));
         // The upsampler delays r by ~16.75 base samples before it reaches the clipper, while h
         // is computed now. Taking the minimum h over that window means the clipper never
         // uses a ceiling looser than the one that belongs to the sample it is clipping.
         hHist.assign (18, 1.0); hPos = 0;
     }
-    void reset() { osR.reset(); osD.reset(); clip.reset(); comp.reset(); d1 = 0.0; env = 0.0; std::fill (hHist.begin(), hHist.end(), 1.0); hPos = 0; }
+    void reset() { osR.reset(); osD.reset(); osTwin.reset(); clip.reset(); comp.reset(); compTwin.reset(); d1 = u1 = 0.0; env = 0.0; std::fill (hHist.begin(), hHist.end(), 1.0); hPos = 0; }
 
-    // xd: delayed input, D: detail, T: threshold (linear), knee 0..1, detail 0..1
-    double process (double xd, double D, double T, double knee, double detail)
+    // xd: delayed input, D: detail, T: threshold (linear), knee 0..1, detail 0..1.
+    // 'twin' receives xd through the same linear stages without clipping (for DELTA).
+    double process (double xd, double D, double T, double knee, double detail, double& twin)
     {
         double dD = detail * D;
         const double cap = 0.8 * T;
@@ -308,24 +310,28 @@ public:
         double u[4], v[4];
         osR.up (r, u);
         osD.up (dD, v);
+        double lin[4];
         for (int i = 0; i < 4; ++i)
         {
             const double a = clip.processVarying (curve, u[i]);
             const double b = 0.5 * (v[i] + d1);        // same linear response as ADAA
+            lin[i] = compTwin.process (0.5 * (u[i] + u1) + b);
+            u1 = u[i];
             d1 = v[i];
             u[i] = comp.process (a + b);
         }
+        twin = osTwin.down (lin);
         return osR.down (u);
     }
 
 private:
-    Oversampler4x osR, osD;
+    Oversampler4x osR, osD, osTwin;
     AdaaClipper clip;
-    DroopComp comp;
+    DroopComp comp, compTwin;
     ClipCurve curve;
     std::vector<double> hHist;
     int hPos = 0;
-    double d1 = 0.0, env = 0.0, envRel = 0.999;
+    double d1 = 0.0, u1 = 0.0, env = 0.0, envRel = 0.999;
 };
 
 } // namespace scalper

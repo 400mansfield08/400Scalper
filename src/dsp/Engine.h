@@ -39,24 +39,36 @@ struct BandSettings
 
 struct BandChannel
 {
-    Oversampler4x os;
+    Oversampler4x os, osTwin;
     AdaaClipper clip;
-    DroopComp comp;
+    DroopComp comp, compTwin;
     IntDelay vizInDelay;
+    double v1 = 0.0;
 
     void prepare (double fs, int vizDelay)
     {
-        os.reset(); clip.reset(); comp.reset();
+        reset();
         comp.prepare (fs * Oversampler4x::factor);
+        compTwin.prepare (fs * Oversampler4x::factor);
         vizInDelay.init (vizDelay);
     }
-    void reset() { os.reset(); clip.reset(); comp.reset(); vizInDelay.reset(); }
+    void reset() { os.reset(); osTwin.reset(); clip.reset(); comp.reset(); compTwin.reset(); vizInDelay.reset(); v1 = 0.0; }
 
-    double process (const ClipCurve& curve, double x)
+    // Returns the clipped band. 'twin' receives the same band through exactly the same linear
+    // stages with no clipping (upsample, ADAA's 2-point average, droop comp, downsample), so
+    // twin - output is precisely what the clipper removed (used by DELTA).
+    double process (const ClipCurve& curve, double x, double& twin)
     {
-        double up[4];
+        double up[4], lin[4];
         os.up (x, up);
-        for (double& v : up) v = comp.process (clip.process (curve, v));
+        for (int i = 0; i < 4; ++i)
+        {
+            const double v = up[i];
+            lin[i] = compTwin.process (0.5 * (v + v1));
+            v1 = v;
+            up[i] = comp.process (clip.process (curve, v));
+        }
+        twin = osTwin.down (lin);
         return os.down (up);
     }
 };
@@ -85,18 +97,21 @@ public:
 
     // Processes one sample. bandIn / bandOut receive per-band pre-clip (latency-aligned)
     // and post-clip values for the visualiser.
+    // twinSum receives the unclipped (but identically filtered) sum of the audible bands.
     double process (double x, int numBands, int slopeDb, const ClipCurve* curves,
-                    const BandSettings* settings, float* bandIn, float* bandOut)
+                    const BandSettings* settings, float* bandIn, float* bandOut, double& twinSum)
     {
         double split_[kMaxBands];
         split.process (x, numBands, slopeDb, split_);
         double sum = 0.0;
+        twinSum = 0.0;
         for (int b = 0; b < numBands; ++b)
         {
-            const double y = bands[size_t (b)].process (curves[b], split_[b]);
+            double twin;
+            const double y = bands[size_t (b)].process (curves[b], split_[b], twin);
             bandIn[b]  = bands[size_t (b)].vizInDelay.process (float (split_[b]));
             bandOut[b] = float (y);
-            if (settings[b].audible) sum += y;
+            if (settings[b].audible) { sum += y; twinSum += twin; }
         }
         return sum;
     }

@@ -81,7 +81,7 @@ int main()
     auto* lat    = static_cast<const clap_plugin_latency*> (p->get_extension (p, CLAP_EXT_LATENCY));
     auto* ports  = static_cast<const clap_plugin_audio_ports*> (p->get_extension (p, CLAP_EXT_AUDIO_PORTS));
     CHECK (params && state && lat && ports, "extensions present");
-    CHECK (params->count (p) == 21, "21 params");
+    CHECK (params->count (p) == 22, "22 params");
 
     char txt[64]; double back = 0;
     params->value_to_text (p, scalper::kXover2, 1500.0, txt, sizeof (txt));
@@ -238,10 +238,43 @@ int main()
     CHECK (peak2 <= ceilLin + 1e-5 && peak2 > 0.3 * ceilLin, "spectral output peak %.5f within the threshold (%.5f incl. out gain)", peak2, ceilLin);
     const std::string poll2 = scalper::Gui::pollJson (*plug, 0, 0, 100, false);
     CHECK (poll2.find ("\"am\":1") != std::string::npos && poll2.find ("\"sm\":[") != std::string::npos, "UI receives spectral mode + clip mask");
+    // ---- DELTA: silent when nothing clips, carries the removed part when it does ----
+    auto deltaPeak = [&] (int mode, double amp) {
+        plug->uiSetParam (scalper::kMode, mode);
+        plug->uiSetParam (scalper::kInGain, 0.0);
+        plug->uiSetParam (scalper::kOutGain, 0.0);
+        plug->uiSetParam (scalper::kDelta, 1);
+        double pk = 0, ph = 0;
+        for (int block = 0; block < 200; ++block)
+        {
+            EventList el;
+            for (uint32_t i = 0; i < N; ++i)
+            {
+                const double x = amp * (0.7 * std::sin (ph) + 0.3 * std::sin (37.0 * ph));   // 80 Hz + 2.96 kHz
+                ph += 2 * 3.14159265358979 * 80.0 / fs;
+                inL[i] = float (x); inR[i] = float (x);
+            }
+            clap_process pr {};
+            pr.frames_count = N; pr.steady_time = -1;
+            pr.audio_inputs = &ain; pr.audio_outputs = &aout;
+            pr.audio_inputs_count = 1; pr.audio_outputs_count = 1;
+            pr.in_events = &el.in; pr.out_events = &oe.out;
+            p->process (p, &pr);
+            if (block >= 100) for (uint32_t i = 0; i < N; ++i) pk = std::max (pk, double (std::fabs (outL[i])));
+        }
+        plug->uiSetParam (scalper::kDelta, 0);
+        return pk;
+    };
     restartRequests = 0;
+    for (int mode : { 0, 1 })
+    {
+        const double quiet = deltaPeak (mode, 0.3), hot = deltaPeak (mode, 1.0);   // threshold is -6 dB (0.501)
+        CHECK (quiet < 1e-4 && hot > 0.1, "%s DELTA: below threshold %.1f dBFS (silent), clipping %.1f dBFS", mode ? "Spectral" : "Sample", 20 * std::log10 (quiet + 1e-12), 20 * std::log10 (hot));
+    }
+
     plug->uiSetParam (scalper::kMode, 0);
     { OutEvents o; EventList e; params->flush (p, &e.in, &o.out); }
-    CHECK (restartRequests == 1, "switching back to Sample requests a restart");
+    CHECK (restartRequests == 1, "switching away from Spectral requests one restart (%d)", restartRequests);
 
     p->stop_processing (p);
     p->deactivate (p);

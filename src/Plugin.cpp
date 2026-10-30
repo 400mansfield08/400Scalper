@@ -89,6 +89,7 @@ bool Plugin::activate (double sr, uint32_t, uint32_t)
     spectral.prepare (sr);
     for (auto& c : specClip) c.prepare (sr);
     for (auto& d : specVizIn) d.init (ChannelEngine::latencySamples() + ceiling.latencySamples());
+    for (auto& d : deltaDelay) d.init (ceiling.latencySamples());
     detailSm = getParam (kDetail) / 100.0;
     smoothCoef = 1.0 - std::exp (-1.0 / (0.010 * sr)); // 10 ms
     const int L = ceiling.latencySamples();
@@ -113,6 +114,7 @@ void Plugin::resetEngines()
     spectral.reset();
     for (auto& c : specClip) c.reset();
     for (auto& d : specVizIn) d.reset();
+    for (auto& d : deltaDelay) d.reset();
 }
 
 void Plugin::reset()
@@ -254,6 +256,7 @@ clap_process_status Plugin::process (const clap_process* p)
     bool anySolo = false;
     double tDetail = 1.0;
     int wantedMode = procMode.load (std::memory_order_relaxed);
+    bool deltaOn = false;
 
     auto refresh = [&]
     {
@@ -277,6 +280,7 @@ clap_process_status Plugin::process (const clap_process* p)
         for (int b = 0; b < kMaxBands; ++b)
             settings[b].audible = numBands == 1 || ! anySolo || getParam (clap_id (kSolo1 + b)) >= 0.5;
         tDetail = getParam (kDetail) / 100.0;
+        deltaOn = getParam (kDelta) >= 0.5;
         wantedMode = getParam (kMode) >= 0.5 ? 1 : 0;
         if (wantedMode == 1) numBands = 1;   // spectral mode is one clipper over the whole signal
         // The two modes have different latency: ask the host to restart us so it picks up the
@@ -339,15 +343,15 @@ clap_process_status Plugin::process (const clap_process* p)
         else if (modeGain < 1.0)
             modeGain = std::min (1.0, modeGain + modeFadeStep);
 
-        double yL, yR;
+        double yL, yR, twinL = 0.0, twinR = 0.0;
         if (procMode.load (std::memory_order_relaxed) == 1)
         {
             // ===== SPECTRAL (the sample-mode engines are not run) =====
             detailSm += (tDetail - detailSm) * smoothCoef;
             double xdL, xdR, dL, dR;
             spectral.process (xL, xR, xdL, xdR, dL, dR);
-            yL = specClip[0].process (xdL, dL, thr[0], knee[0], detailSm);
-            yR = specClip[1].process (xdR, dR, thr[0], knee[0], detailSm);
+            yL = specClip[0].process (xdL, dL, thr[0], knee[0], detailSm, twinL);
+            yR = specClip[1].process (xdR, dR, thr[0], knee[0], detailSm, twinR);
             ceiling.process (yL, yR, thr[0], true);
 
             const float iMn = specVizIn[0].process (float (std::min (xdL, xdR)));
@@ -366,8 +370,9 @@ clap_process_status Plugin::process (const clap_process* p)
         else
         {
             // ===== SAMPLE (the spectral engine is not run) =====
-            yL = engines[0].process (xL, numBands, slopeDb, curves, settings, bi[0], bo[0]);
-            yR = stereoIn ? engines[1].process (xR, numBands, slopeDb, curves, settings, bi[1], bo[1]) : yL;
+            yL = engines[0].process (xL, numBands, slopeDb, curves, settings, bi[0], bo[0], twinL);
+            if (stereoIn) yR = engines[1].process (xR, numBands, slopeDb, curves, settings, bi[1], bo[1], twinR);
+            else { yR = yL; twinR = twinL; }
             if (! stereoIn) { for (int b = 0; b < numBands; ++b) { bi[1][b] = bi[0][b]; bo[1][b] = bo[0][b]; } }
 
             ceiling.process (yL, yR, thr[0], numBands == 1);
@@ -391,6 +396,12 @@ clap_process_status Plugin::process (const clap_process* p)
             }
         }
 
+        // DELTA: the unclipped twin (same filters, same delay) minus the output = exactly what
+        // the clipper and ceiling removed. Silent when nothing is being clipped.
+        {
+            const double tL = deltaDelay[0].process (float (twinL)), tR = deltaDelay[1].process (float (twinR));
+            if (deltaOn) { yL = tL - yL; yR = tR - yR; }
+        }
         yL *= modeGain; yR *= modeGain;
         const double oL = yL * outGain, oR = yR * outGain;
         meterIn.raise (float (std::max (std::fabs (xL), std::fabs (xR))));
@@ -460,6 +471,7 @@ bool Plugin::loadState (const clap_istream* stream)
         if (idx >= 0 && paramDefs()[size_t (idx)].saved) values[idx].store (clampParam (idx, v));
     }
     for (int b = 0; b < kMaxBands; ++b) values[paramIndex (clap_id (kSolo1 + b))].store (0.0);
+    values[paramIndex (kDelta)].store (0.0);
     if (hostParams) hostParams->rescan (host, CLAP_PARAM_RESCAN_VALUES);
     return true;
 }

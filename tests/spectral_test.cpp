@@ -30,13 +30,16 @@ struct Chain
     SpectralClipChannel cl, cr;
     StereoCeiling ceil;
     double pre = 0.0;   // peak before the look-ahead ceiling
+    double twin = 0.0;  // unclipped twin of the last sample (left)
     Chain() { split.prepare (fs); cl.prepare (fs); cr.prepare (fs); ceil.prepare (fs); }
     double run (double x, double T, double knee, double detail)
     {
         double xdl, xdr, dl, dr;
         split.process (x, x, xdl, xdr, dl, dr);
-        double yl = cl.process (xdl, dl, T, knee, detail);
-        double yr = cr.process (xdr, dr, T, knee, detail);
+        double tl, tr;
+        double yl = cl.process (xdl, dl, T, knee, detail, tl);
+        double yr = cr.process (xdr, dr, T, knee, detail, tr);
+        twin = tl;
         pre = std::max (pre, std::fabs (yl));
         ceil.process (yl, yr, T, true);
         return yl;

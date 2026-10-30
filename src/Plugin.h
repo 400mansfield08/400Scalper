@@ -69,7 +69,8 @@ private:
     double sampleRate = 48000.0;
     ChannelEngine engines[2];
     SpectralClipChannel specClip[2];
-    IntDelay specVizIn[2];                       // aligns the spectral-mode "input" trace with the output
+    IntDelay specVizIn[2];
+    IntDelay deltaDelay[2];                      // twin -> aligned with the look-ahead ceiling's delay                       // aligns the spectral-mode "input" trace with the output
     double detailSm = 1.0;
     bool restartRequested = false;
     int pendingMode = -1;

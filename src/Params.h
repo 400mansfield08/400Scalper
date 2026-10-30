@@ -21,6 +21,7 @@ enum ParamId : clap_id
     kSolo1   = 30,  // 30..33  0/1 (monitoring only, not saved)
     kMode    = 40,  // 0 = Sample, 1 = Spectral (changes latency -> host restart)
     kDetail  = 41,  // Spectral mode detail preservation, %
+    kDelta   = 42,  // listen to what is being clipped (monitoring only, not saved)
 };
 
 enum class Unit { dB, Hz, Percent, Count, Slope, Toggle, Mode };
@@ -37,9 +38,9 @@ struct ParamDef
     bool saved;
 };
 
-inline const std::array<ParamDef, 21>& paramDefs()
+inline const std::array<ParamDef, 22>& paramDefs()
 {
-    static const std::array<ParamDef, 21> defs { {
+    static const std::array<ParamDef, 22> defs { {
         { kInGain,  "In Gain",          "Global",       -24.0, 24.0,    0.0,  Unit::dB,      false, true,  true  },
         { kOutGain, "Out Gain",         "Global",       -24.0, 24.0,    0.0,  Unit::dB,      false, true,  true  },
         { kBands,   "Bands",            "Multiband",      1.0,  4.0,    1.0,  Unit::Count,   true,  true,  true  },
@@ -61,11 +62,12 @@ inline const std::array<ParamDef, 21>& paramDefs()
         { kSolo1 + 3, "Solo 4",         "Band 4",         0.0,  1.0,    0.0,  Unit::Toggle,  true,  false, false },
         { kMode,      "Mode",           "Global",         0.0,  1.0,    0.0,  Unit::Mode,    true,  true,  true  },
         { kDetail,    "Detail",         "Spectral",       0.0, 100.0, 100.0,  Unit::Percent, false, true,  true  },
+        { kDelta,     "Delta",          "Global",         0.0,  1.0,    0.0,  Unit::Toggle,  true,  false, false },
     } };
     return defs;
 }
 
-constexpr int kNumParams = 21;
+constexpr int kNumParams = 22;
 
 inline int paramIndex (clap_id id)
 {
