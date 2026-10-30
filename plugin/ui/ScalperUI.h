@@ -45,7 +45,9 @@ private:
     void attach (IGraphics* g)
     {
         g->SetLayoutOnResize (true);
-        g->LoadFont (kFont, const_cast<void*> (font), fontBytes);
+        // Sui Generis is embedded in the binary; fall back to a system font if it can't load.
+        if (! g->LoadFont (kFont, const_cast<void*> (font), fontBytes))
+            g->LoadFont (kFont, "Segoe UI", ETextStyle::Normal);
         g->EnableMouseOver (true);
 
         bg       = add<Background> (g);
