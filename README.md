@@ -8,7 +8,7 @@ A transparent soft-knee clipper, as a CLAP plugin. Made for Always 400.
 - **Two modes**, switched with SAMPLE / SPECTRAL at the top:
   - **Sample**: the per-sample clipper described above.
   - **Spectral**: a detail-preserving clipper. A 26-band ear-shaped (Mel) filter bank works out which parts of the sound are loud and which are quiet detail. Only the loud part is clipped; the **DETAIL** knob (0–100 %) sets how much of the quiet detail rides through untouched. Nothing passes the threshold. In tests, 100 % of a quiet 4 kHz tone survives under a hard-clipped 60 Hz tone, against 26 % with the plain clipper. Delay: 579 samples at 48 kHz (12 ms).
-  - Switching modes changes the delay, so the plugin asks the host to restart it. The UI shows "SWITCHING MODE…" until that happens.
+  - Only one mode runs at a time. The audio switches immediately with a 10 ms fade out and in, and the other engine is stopped and reset. The two modes have different delays, so the plugin also asks the host to restart it to update its delay compensation.
   - The Spectral **SPECTRUM** display sits left of OUT. The accent color shows what's being clipped, and the opposite hue shows the detail being kept. The DETAIL knob uses the same opposite hue.
 - **Optional multiband** (Sample mode): up to 4 bands, with crossovers at 6, 12 or 24 dB/oct (first-order, Linkwitz-Riley 2 or Linkwitz-Riley 4). The bands sum back flat, within 0.02 dB. Each band has its own Threshold, Knee and Solo.
 - **UI**: the v5 interface runs in an embedded web view (WebView2 on Windows):
