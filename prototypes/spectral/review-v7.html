@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>400Scalper — UI Mockup v6</title>
+<title>400Scalper — UI Mockup v7 · Spectral mode</title>
 <style>
 @font-face{font-family:'Sui Generis';src:url(fonts/SuiGenerisRg-Regular.ttf) format('truetype');font-display:swap}
 :root{--accent:#FF6A13;--grey:#8A8A8A}
@@ -127,12 +127,23 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
 .plugin.spectral .mb{min-width:180px}
 .kn.detailKn{display:none}
 .plugin.spectral .kn.detailKn{display:flex}
+/* v7: spectral display sits just left of OUT */
+:root{--comp:#13A8FF}
+.plugin.spectral .mb{display:none}
+.plugin.spectral #slotRest{flex:1;min-width:0}
+.sc{display:none;flex:1;min-width:190px;height:150px;flex-direction:column;gap:5px}
+.plugin.spectral .sc{display:flex}
+.sch{height:22px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;letter-spacing:.1em;color:#8C8C8C;white-space:nowrap}
+.sch .lg{display:flex;gap:10px;align-items:center}
+.sch .lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.scbox{position:relative;flex:1;min-height:0;background:#070707;border:1px solid #2A2A2A;border-radius:4px;overflow:hidden}
+.scbox canvas{position:absolute;left:0;top:0}
 </style>
 </head>
 <body>
 <div class="page">
   <div class="intro">
-    <h1><b>400</b>SCALPER — UI mockup v6 · Spectral mode</h1>
+    <h1><b>400</b>SCALPER — UI mockup v7 · Spectral mode</h1>
     <p>For review · the audio is a simulated drum loop</p>
   </div>
 
@@ -221,10 +232,17 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   </div>
 
   <div class="notes">
-    <h2>What's new in v6 — Spectral mode (prototype)</h2>
+    <h2>What's new in v7</h2>
+    <ul>
+      <li>In Spectral mode the display now sits <b>just left of OUT</b>. The middle panel (the band editor in Sample mode) is hidden, so the bottom row reads IN · THRESHOLD · KNEE · DETAIL · CURVE · SPECTRUM · OUT.</li>
+      <li>The display is a live <b>frequency spectrum</b>. <span class="o">Accent color</span> = what's being clipped right now. The <b>opposite color</b> (blue against the default orange) = detail being kept by the DETAIL knob. Grey = passing through untouched.</li>
+      <li>The "kept" color is always the opposite hue of the accent, so it updates if you change the accent color. The DETAIL knob uses the same color, so it visibly matches what it controls.</li>
+      <li>Turn DETAIL down and the kept color fades to grey; push IN harder and more of the low end lights up in the accent color.</li>
+    </ul>
+    <h2>From v6 — Spectral mode (prototype)</h2>
     <ul>
       <li>Click <b>SPECTRAL</b> at the top. The bottom row switches to Spectral mode: it gets an accent line, a <span class="o">SPECTRAL MODE</span> tag, and the band editor is replaced by the <b>ear filter bank</b>.</li>
-      <li>The ear filter bank shows 26 bands spaced the way the ear hears pitch. <span class="o">Accent-colored</span> bands are the loud content being clipped. Light bands are quiet detail that passes through untouched.</li>
+      <li>(v6 only) The ear filter bank showed 26 bands spaced the way the ear hears pitch. <span class="o">Accent-colored</span> bands are the loud content being clipped. Light bands are quiet detail that passes through untouched.</li>
       <li><b>DETAIL</b> (new knob) sets how much of that detail is protected. At 0% it behaves like the normal clipper. Turn it up and watch the light bands; on the scope, the waveform keeps its texture through the clipped peaks.</li>
       <li>Spectral mode clips the whole signal, so there's no band splitting, solo, or crossover slope. THRESHOLD and KNEE work as usual, and nothing passes the threshold.</li>
       <li>This preview runs the real prototype algorithm. In the plugin it adds about 11 ms of delay (12 ms in total), which the DAW compensates for.</li>
@@ -336,7 +354,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     let env = 0;
 
     const st = {
-      N, H, latency: N - 1, centers, bandDb, mask,
+      N, H, latency: N - 1, centers, bandDb, mask, binMask, sr,
       range: 15,      // dB below the loudest band that still counts as LOUD
       detail: 1.0,    // 0..1
       process(x, T, knee) {
@@ -399,7 +417,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
 <script>
 (function () {
   const DEFAULT_ACCENT = '#FF6A13', grey = '#8A8A8A', minus = '\u2212';
-  let accent = DEFAULT_ACCENT, accentRGB = [255, 106, 19];
+  let accent = DEFAULT_ACCENT, accentRGB = [255, 106, 19], compRGB = [19, 168, 255], clipAct = 0;
   const $ = (id) => document.getElementById(id);
   const dbToA = (db) => Math.pow(10, db / 20);
   const SR = 44100;
@@ -598,11 +616,18 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   const rest = $('slotRest');
   rest.appendChild(buildKnob('threshold'));
   rest.appendChild(buildKnob('knee'));
-  { const dk = buildKnob('detail'); dk.classList.add('detailKn'); rest.appendChild(dk); }
+  { const dk = buildKnob('detail'); dk.classList.add('detailKn'); dk.querySelector('.ar').style.stroke = 'var(--comp)'; dk.querySelector('.lbl').style.color = 'var(--comp)'; rest.appendChild(dk); }
   const cw = document.createElement('div');
   cw.className = 'curve';
   cw.innerHTML = '<span>CURVE</span><canvas id="curveCv" aria-hidden="true"></canvas>';
   rest.appendChild(cw);
+  {
+    const sc = document.createElement('div');
+    sc.className = 'sc';
+    sc.innerHTML = '<div class="sch"><span>SPECTRUM</span><span class="lg"><span><i style="background:var(--accent)"></i>CLIPPED</span><span><i style="background:var(--comp)"></i>DETAIL KEPT</span></span></div>' +
+      '<div class="scbox" id="scbox"><canvas id="scCv" aria-hidden="true"></canvas></div>';
+    rest.appendChild(sc);
+  }
   rest.appendChild(buildKnob('outGain'));
   const renderKnobs = () => Object.keys(DEFS).forEach(renderKnob);
   renderKnobs();
@@ -870,6 +895,51 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
       }
     }
   }
+  function analyseSpec(dt) {
+    if (V.frozen) return;
+    for (let i = 0; i < FFTN; i++) { re[i] = fftRing[(fftPos + i) % FFTN] * win[i]; im[i] = 0; }
+    fft();
+    for (let k = 1; k < FFTN / 2; k++) {
+      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]) / (FFTN / 4);
+      const db = 20 * Math.log10(mag + 1e-9) + 4.5 * Math.log2(k * SR / FFTN / 1000);  // +4.5 dB/oct tilt so mixes read flat
+      specDb[k] = db > specDb[k] ? specDb[k] + (db - specDb[k]) * 0.6 : Math.max(db, specDb[k] - 40 * dt);
+    }
+  }
+
+  // ---------- spectral-mode display: what's clipped vs. what DETAIL keeps ----------
+  const scMask = new Float32Array(2048);
+  function drawSpecClip(dt) {
+    analyseSpec(dt);
+    const box = $('scbox'), w = box.clientWidth, h = box.clientHeight;
+    const ctx = prep($('scCv'), w, h);
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#151515';
+    [100, 1000, 10000].forEach((f) => ctx.fillRect(Math.round(fToX(f, w)), 0, 1, h));
+    ctx.fillStyle = '#5E5E5E'; ctx.font = '8px "Sui Generis", sans-serif';
+    [[100, '100'], [1000, '1k'], [10000, '10k']].forEach(([f, t]) => ctx.fillText(t, fToX(f, w) + 3, 10));
+    const yOf = (db) => h - 4 - (Math.max(-72, Math.min(6, db)) + 72) / 78 * (h - 18);
+    const d = P.detail / 100;
+    const act = clipAct;                      // 0 = nothing clipping right now, 1 = clipping hard
+    const bm = spec.binMask, bins = bm.length;
+    const level = (x) => { const f = xToF(x + 0.5, w), kf = f * FFTN / SR, k0 = Math.max(1, Math.floor(kf)), k1 = Math.min(FFTN / 2 - 1, k0 + 1), t = kf - Math.floor(kf); return specDb[k0] * (1 - t) + specDb[k1] * t; };
+    for (let x = 0; x < w; x++) {
+      const f = xToF(x + 0.5, w);
+      // loud/detail split from the clipper's own (coarser) analysis bins
+      const mf = f * spec.N / spec.sr, m0 = Math.min(bins - 1, Math.floor(mf)), m1 = Math.min(bins - 1, m0 + 1), u = mf - Math.floor(mf);
+      const m = bm[m0] * (1 - u) + bm[m1] * u;
+      if (!V.frozen) scMask[x] += (m - scMask[x]) * Math.min(1, dt * 15);
+      const mm = scMask[x];
+      const loud = mm * act, keep = (1 - mm) * d, rest = Math.max(0, 1 - loud - keep);
+      const c = [0, 1, 2].map((i) => Math.round(accentRGB[i] * loud + compRGB[i] * keep + 110 * rest));
+      const y = yOf(level(x));
+      ctx.fillStyle = 'rgba(' + c.join(',') + ',0.85)';
+      ctx.fillRect(x, y, 1.05, h - y);
+    }
+    ctx.beginPath();
+    for (let x = 0; x < w; x++) { const y = yOf(level(x)); if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.strokeStyle = 'rgba(230,230,230,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   function drawSpectrum(dt) {
     const cv = $('specCv'), w = specW(), h = specH();
     const ctx = prep(cv, w, h);
@@ -885,8 +955,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     [100, 1000, 10000].forEach((f) => ctx.fillRect(Math.round(fToX(f, w)), 0, 1, h));
     ctx.fillStyle = '#5E5E5E'; ctx.font = '8px "Sui Generis", sans-serif';
     [[100, '100'], [1000, '1k'], [10000, '10k']].forEach(([f, t]) => ctx.fillText(t, fToX(f, w) + 3, 10));
-    // analysis
-    if (!V.frozen) {
+    analyseSpec(dt);
+    if (false) {
       for (let i = 0; i < FFTN; i++) { re[i] = fftRing[(fftPos + i) % FFTN] * win[i]; im[i] = 0; }
       fft();
       for (let k = 1; k < FFTN / 2; k++) {
@@ -1095,7 +1165,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     if (box.clientWidth !== lastW || box.clientHeight !== lastH) { lastW = box.clientWidth; lastH = box.clientHeight; renderOverlay(); }
     if (specW() !== lastSW) { lastSW = specW(); positionBands(); }
     drawScope(); drawCurve();
-    if (mode === 'spectral') drawFilterBank(dt); else drawSpectrum(dt);
+    if (mode === 'spectral') drawSpecClip(dt); else drawSpectrum(dt);
     drawMeter($('meterIn'), mIn); drawMeter($('meterOut'), mOut);
     if (!V.frozen && now - lastTxt > 120) {
       lastTxt = now;
@@ -1111,6 +1181,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
         if (a > 1e-3 && b > 1e-4 && a > b) { const d = 20 * Math.log10(a / b); if (d > gr) gr = d; }
       }
       $('grText').textContent = gr > 0.05 ? minus + gr.toFixed(1) + ' dB' : '0.0 dB';
+      clipAct = Math.min(1, gr / 2);
       $('clipLbl').textContent = (bands.length > 1 && mode !== 'spectral') ? 'CLIP B' + (sel + 1) : 'CLIP';
       $('clipDot').style.background = gr > 0.1 ? accent : '#2A2A2A';
       $('inPk').textContent = fmtPk(mIn.hold);
@@ -1138,6 +1209,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   function applyAccent(rgb, from) {
     accentRGB = rgb; accent = toHex(rgb);
     document.documentElement.style.setProperty('--accent', accent);
+    { const [hh, ss, vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); compRGB = hsv2rgb((hh + 180) % 360, ss, vv); document.documentElement.style.setProperty('--comp', toHex(compRGB)); }
     if (from !== 'hex') $('hexIn').value = accent;
     if (from !== 'wheel' && from !== 'val') { [H, S, Vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); $('valSl').value = Math.round(Vv * 100); drawWheel(); }
     placeMarker();

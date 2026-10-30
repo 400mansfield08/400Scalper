@@ -110,11 +110,30 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   .grp span.z{min-width:24px}
   .tbtn{padding:0 6px}
   .tools{gap:4px}
+  .sch>span:first-child{display:none}
 }
+/* ---- Spectral mode ---- */
+:root{--comp:#13A8FF}
+.foot{position:relative}
+.modetag{position:absolute;left:14px;top:6px;font-size:9px;letter-spacing:.14em;color:var(--accent);display:none}
+.plugin.spectral .foot{background:#111;box-shadow:inset 0 1px 0 var(--accent)}
+.plugin.spectral .modetag{display:block}
+.plugin.spectral .mb{display:none}
+.plugin.spectral #slotRest{flex:1;min-width:0}
+.kn.detailKn{display:none}
+.plugin.spectral .kn.detailKn{display:flex}
+.sc{display:none;flex:1;min-width:150px;height:150px;flex-direction:column;gap:5px}
+.plugin.spectral .sc{display:flex}
+.sch{height:22px;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:9px;letter-spacing:.1em;color:#8C8C8C;white-space:nowrap;overflow:hidden}
+.sch .lg{display:flex;gap:10px;align-items:center}
+.sch .lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.scbox{position:relative;flex:1;min-height:0;background:#070707;border:1px solid #2A2A2A;border-radius:4px;overflow:hidden}
+.scbox canvas{position:absolute;left:0;top:0}
+.switching{position:absolute;right:14px;top:6px;font-size:9px;letter-spacing:.1em;color:#8C8C8C;display:none}
 </style>
 </head>
 <body>
-<div class="plugin">
+<div class="plugin" id="plugin">
         <div class="hdr">
           <div class="word">
             <button type="button" class="wbtn" id="wbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="pop" aria-label="400Scalper, change accent color"><span>400</span>SCALPER</button>
@@ -158,6 +177,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
         </div>
 
         <div class="foot" id="foot">
+          <span class="modetag">SPECTRAL MODE</span><span class="switching" id="switching">SWITCHING MODE…</span>
           <div id="slotIn"></div>
           <div class="mb">
             <div class="mbh">
@@ -184,16 +204,156 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
         </div>
 </div>
 <script>
+// 400Scalper — Spectral mode prototype (detail-preserving clipper).
+//
+// 1. A short STFT (N ≈ 10.7 ms, hop N/4, sqrt-Hann WOLA) is grouped into 26 Mel-spaced
+//    "ear" bands with triangular weights.
+// 2. Per frame, bands within RANGE dB of the loudest band are LOUD (mask -> 1), quieter
+//    bands are DETAIL (mask -> 0). Masks attack instantly and release over ~60 ms.
+// 3. The DETAIL signal D is resynthesised from the quiet bins; the loud part is x - D
+//    (complementary, so x = L + D exactly).
+// 4. Clip only the loud part, against bounds that leave room for the detail:
+//       y = d·D + softclip(x - d·D, hi = T - d·D, lo = -T - d·D)
+//    -> |y| <= T always; below threshold y = x; while clipping the detail rides through.
+// Latency = N samples (frame length).
+
+(function (root) {
+  function makeFFT(n) {
+    const rev = new Uint32Array(n);
+    for (let i = 0, j = 0; i < n; i++) {
+      rev[i] = j;
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+    }
+    const cos = new Float64Array(n / 2), sin = new Float64Array(n / 2);
+    for (let i = 0; i < n / 2; i++) { cos[i] = Math.cos(2 * Math.PI * i / n); sin[i] = Math.sin(2 * Math.PI * i / n); }
+    return function fft(re, im, inverse) {
+      for (let i = 0; i < n; i++) { const j = rev[i]; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+      for (let len = 2; len <= n; len <<= 1) {
+        const step = n / len, half = len / 2;
+        for (let i = 0; i < n; i += len) {
+          for (let j = 0; j < half; j++) {
+            const wr = cos[j * step], wi = inverse ? sin[j * step] : -sin[j * step];
+            const a = i + j, b = a + half;
+            const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+            re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          }
+        }
+      }
+      if (inverse) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+    };
+  }
+
+  const NB = 26;
+  const mel = (f) => 2595 * Math.log10(1 + f / 700);
+  const imel = (m) => 700 * (Math.pow(10, m / 2595) - 1);
+
+  function createSpectral(sr) {
+    const N = Math.pow(2, Math.round(Math.log2(0.0107 * sr))); // 512 @ 44.1/48k, 1024 @ 88.2/96k
+    const H = N / 4, nb = N / 2 + 1;
+    const fft = makeFFT(N);
+    const win = new Float64Array(N);
+    for (let i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos(2 * Math.PI * i / N)); // periodic sqrt-Hann
+    // Mel band edges 20 Hz .. 20 kHz (clamped to Nyquist), triangular weights per bin
+    const fmax = Math.min(20000, sr / 2 * 0.98);
+    const edges = []; for (let i = 0; i <= NB + 1; i++) edges.push(imel(mel(20) + (mel(fmax) - mel(20)) * i / (NB + 1)));
+    const centers = edges.slice(1, NB + 1);
+    const W = []; // W[band] = Float64Array(nb)
+    for (let b = 0; b < NB; b++) {
+      const w = new Float64Array(nb), lo = edges[b], c = edges[b + 1], hi = edges[b + 2];
+      for (let k = 0; k < nb; k++) {
+        const f = k * sr / N;
+        if (f > lo && f < hi) w[k] = f <= c ? (f - lo) / (c - lo) : (hi - f) / (hi - c);
+      }
+      // bands narrower than a bin: give them the nearest bin so every band is measurable
+      let s = 0; for (let k = 0; k < nb; k++) s += w[k];
+      if (s === 0) w[Math.min(nb - 1, Math.round(c * N / sr))] = 1;
+      W.push(w);
+    }
+    const wsum = new Float64Array(nb);
+    for (let k = 0; k < nb; k++) { let s = 0; for (let b = 0; b < NB; b++) s += W[b][k]; wsum[k] = s || 1; }
+
+    const inBuf = new Float64Array(N), outAcc = new Float64Array(N + H), xDelay = new Float64Array(N - 1);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    const bandDb = new Float64Array(NB).fill(-120), mask = new Float64Array(NB), binMask = new Float64Array(nb), dil = new Float64Array(nb);
+    let inPos = 0, hopCount = 0, outPos = 0, xdPos = 0;
+    const relPerHop = Math.exp(-H / (0.060 * sr));
+    const envRel = Math.exp(-1 / (0.015 * sr));
+    let env = 0;
+
+    const st = {
+      N, H, latency: N - 1, centers, bandDb, mask, binMask, sr,
+      range: 15,      // dB below the loudest band that still counts as LOUD
+      detail: 1.0,    // 0..1
+      process(x, T, knee) {
+        // ---- analysis/synthesis of the DETAIL signal ----
+        inBuf[inPos] = x; inPos = (inPos + 1) % N;
+        if (++hopCount >= H) {
+          hopCount = 0;
+          for (let i = 0; i < N; i++) { re[i] = inBuf[(inPos + i) % N] * win[i]; im[i] = 0; }
+          fft(re, im, false);
+          let mx = -120;
+          for (let b = 0; b < NB; b++) {
+            let e = 0, s = 0; const w = W[b];
+            for (let k = 0; k < nb; k++) if (w[k]) { e += w[k] * (re[k] * re[k] + im[k] * im[k]); s += w[k]; }
+            const db = 10 * Math.log10(e / (s || 1) + 1e-20);
+            bandDb[b] = db; if (db > mx) mx = db;
+          }
+          for (let b = 0; b < NB; b++) {
+            const t = Math.max(0, Math.min(1, (bandDb[b] - (mx - st.range)) / 6 + 0.5)); // 6 dB soft edge
+            mask[b] = t > mask[b] ? t : mask[b] * relPerHop + t * (1 - relPerHop);
+          }
+          for (let k = 0; k < nb; k++) { let m = 0; for (let b = 0; b < NB; b++) if (W[b][k]) m += W[b][k] * mask[b]; binMask[k] = m / wsum[k]; }
+          // widen loud regions by ±3 bins so window leakage of a loud tone is not mistaken for detail
+          for (let k = 0; k < nb; k++) { let m = 0; for (let j = Math.max(0, k - 3); j <= Math.min(nb - 1, k + 3); j++) if (binMask[j] > m) m = binMask[j]; dil[k] = m; }
+          for (let k = 0; k < nb; k++) binMask[k] = dil[k];
+          // keep only DETAIL (1 - loud mask)
+          for (let k = 0; k < nb; k++) { const g = 1 - binMask[k]; re[k] *= g; im[k] *= g; if (k > 0 && k < N / 2) { re[N - k] = re[k]; im[N - k] = -im[k]; } }
+          fft(re, im, true);
+          for (let i = 0; i < N; i++) outAcc[i] += re[i] * win[i] * 0.5; // sqrt-Hann^2, hop N/4 sums to 2
+          outPos = 0;
+        }
+        const D = outAcc[outPos];
+        outPos++;
+        if (outPos === H) { outAcc.copyWithin(0, H); outAcc.fill(0, N); }
+        // ---- delay the dry input by N to line up with D ----
+        const xd = xDelay[xdPos]; xDelay[xdPos] = x; xdPos = (xdPos + 1) % (N - 1);
+        // ---- detail-preserving clip ----
+        // Clip the loud part at T minus the detail's peak envelope, then add the detail back on
+        // top: the detail survives the clipped region, and |y| <= (T - env) + |dD| <= T.
+        let dD = st.detail * D;
+        // detail can never use more than 80% of the ceiling (e.g. a broadband snare tagged as detail)
+        if (Math.abs(dD) > 0.8 * T) dD *= 0.8 * T / Math.abs(dD);
+        const a = Math.abs(dD);
+        env = Math.max(a, env * envRel);
+        const h = T - Math.min(env, 0.8 * T);
+        const r = xd - dD;
+        const f = (v) => { const ks = h * (1 - knee); if (v <= ks) return v; if (knee <= 1e-4) return h; const w = h - ks; return ks + w * Math.tanh((v - ks) / w); };
+        const yr = r >= 0 ? f(r) : -f(-r);
+        return { y: dD + yr, xd, D };
+      },
+    };
+    return st;
+  }
+
+  root.createSpectral = createSpectral;
+  root.SPECTRAL_NB = NB;
+  if (typeof module !== 'undefined') module.exports = { createSpectral, NB };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 (function () {
   'use strict';
   const DEFAULT_ACCENT = '#FF6A13', grey = '#8A8A8A', minus = '−';
-  let accent = DEFAULT_ACCENT, accentRGB = [255, 106, 19];
+  let accent = DEFAULT_ACCENT, accentRGB = [255, 106, 19], compRGB = [19, 168, 255], clipAct = 0;
   const $ = (id) => document.getElementById(id);
   const dbToA = (db) => Math.pow(10, db / 20);
   const scale = 1;
 
   // ---------- parameter ids (must match src/Params.h) ----------
-  const ID = { inGain: 0, outGain: 1, bands: 2, slope: 3, xover: 4, thr: 10, knee: 20, solo: 30 };
+  const ID = { inGain: 0, outGain: 1, bands: 2, slope: 3, xover: 4, thr: 10, knee: 20, solo: 30, mode: 40, detail: 41 };
   const SLOPES = [6, 12, 24];
   const PDEF = {};   // id -> {min,max,def}
   const P = {};      // id -> value
@@ -219,7 +379,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
       [0, -24, 24, 0], [1, -24, 24, 0], [2, 1, 4, 1], [3, 0, 2, 2], [4, 30, 16000, 120], [5, 30, 16000, 1000], [6, 30, 16000, 6000],
       [10, -24, 0, -6], [11, -24, 0, -6], [12, -24, 0, -6], [13, -24, 0, -6],
       [20, 0, 100, 30], [21, 0, 100, 30], [22, 0, 100, 30], [23, 0, 100, 30],
-      [30, 0, 1, 0], [31, 0, 1, 0], [32, 0, 1, 0], [33, 0, 1, 0]];
+      [30, 0, 1, 0], [31, 0, 1, 0], [32, 0, 1, 0], [33, 0, 1, 0], [40, 0, 1, 0], [41, 0, 100, 100]];
     const vals = {}; defs.forEach(([id, , , d]) => vals[id] = d);
     let sel = 0, acc = DEFAULT_ACCENT;
     // drum loop
@@ -246,14 +406,28 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     const fft = new Float32Array(2048); let fpos = 0;
     let mi = 0, mo = 0;
     const bIn = [0, 0, 0, 0];
+    let spec = createSpectral(SR), simMode = 0;
     function run() {
       const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
       carry += dt * SR; let n = Math.floor(carry); carry -= n;
       const nb = Math.round(vals[2]), gIn = dbToA(vals[0]), gOut = dbToA(vals[1]);
+      const want = vals[40] >= 0.5 ? 1 : 0;
+      if (want !== simMode) { simMode = want; spec = createSpectral(SR); }   // like the plugin's restart
       const anySolo = nb > 1 && [0, 1, 2, 3].some((b) => b < nb && vals[30 + b] >= 0.5);
       const a = [0, 1, 2].map((i) => 1 - Math.exp(-2 * Math.PI * vals[4 + i] / SR));
       while (n-- > 0) {
         const x = sig[pos] * gIn; pos = (pos + 1) % LEN;
+        if (simMode === 1) {
+          spec.detail = vals[41] / 100;
+          const r = spec.process(x, dbToA(vals[10]), vals[20] / 100);
+          const A = accu[0];
+          if (dcount === 0) { A[0] = A[1] = r.xd; A[2] = A[3] = r.y; }
+          else { A[0] = Math.min(A[0], r.xd); A[1] = Math.max(A[1], r.xd); A[2] = Math.min(A[2], r.y); A[3] = Math.max(A[3], r.y); }
+          if (++dcount >= DEC) { const idx = (count % CAP) * 4; rings[0].set(A, idx); for (let b = 1; b < 4; b++) rings[b].fill(0, idx, idx + 4); count++; dcount = 0; }
+          fft[fpos] = x; fpos = (fpos + 1) % 2048;
+          mi = Math.max(mi, Math.abs(x)); mo = Math.max(mo, Math.abs(r.y * gOut));
+          continue;
+        }
         let rem = x;
         for (let b = 0; b < nb - 1; b++) { lp[b] += a[b] * (rem - lp[b]); bIn[b] = lp[b]; rem -= lp[b]; }
         bIn[nb - 1] = rem;
@@ -284,7 +458,12 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
         const v = new Array((count - from) * 4);
         const r = rings[Math.max(0, Math.min(3, band))];
         for (let i = from, k = 0; i < count; i++) { const o = (i % CAP) * 4; v[k++] = r[o]; v[k++] = r[o + 1]; v[k++] = r[o + 2]; v[k++] = r[o + 3]; }
-        const out = { now: count, from, sr: SR, p: defs.map(([id]) => vals[id]), mi, mo, v };
+        const out = { now: count, from, sr: SR, p: defs.map(([id]) => vals[id]), mi, mo, v, am: simMode };
+        if (simMode === 1) {
+          const sm = new Array(128), bm = spec.binMask, nbins = bm.length;
+          for (let i = 0; i < 128; i++) { const f = 20 * Math.pow(1000, i / 127), kf = f * spec.N / SR, k0 = Math.min(nbins - 1, Math.floor(kf)), k1 = Math.min(nbins - 1, k0 + 1), u = kf - Math.floor(kf); sm[i] = bm[k0] * (1 - u) + bm[k1] * u; }
+          out.sm = sm;
+        }
         mi = mo = 0;
         if (wantFft) { const f = new Array(2048); for (let i = 0; i < 2048; i++) f[i] = fft[(fpos + i) % 2048]; out.f = f; }
         return out;
@@ -297,7 +476,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   }
 
   let engine = null;
-  const ORDER = [0, 1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33];
+  const ORDER = [0, 1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33, 40, 41];
 
   // ==========================================================================
   // Model helpers
@@ -308,7 +487,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   const bandThr = (b) => P[ID.thr + b];
   const bandKnee = (b) => P[ID.knee + b];
   const soloOn = (b) => P[ID.solo + b] >= 0.5;
-  let sel = 0;
+  let sel = 0, selBeforeSpectral = 0, wasSpectral = false, activeMode = 0, specMask = null;
+  const isSpectral = () => P[ID.mode] >= 0.5;
 
   function setParam(id, v, opts) {
     v = clampP(id, v);
@@ -329,6 +509,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     threshold: { label: 'THRESHOLD', aria: 'Threshold',   min: -24, max: 0,   def: -6, bip: false, unit: 'dB', id: () => ID.thr + sel },
     knee:      { label: 'KNEE',      aria: 'Knee',        min: 0,   max: 100, def: 30, bip: false, unit: '%',  id: () => ID.knee + sel },
     outGain:   { label: 'OUT',       aria: 'Output gain', min: -24, max: 24,  def: 0,  bip: true,  unit: 'dB', id: () => ID.outGain },
+    detail:    { label: 'DETAIL',    aria: 'Detail preservation', min: 0, max: 100, def: 100, bip: false, unit: '%', id: () => ID.detail },
   };
   function polar(a, r) { const rad = a * Math.PI / 180; return [32 + r * Math.sin(rad), 32 - r * Math.cos(rad)]; }
   function arc(a0, a1, r) {
@@ -491,7 +672,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     const thr = $('thr');
     thr.style.width = Math.max(0, g.W) + 'px';
     thr.style.top = Math.round(g.c - g.T * g.s - 10) + 'px';
-    $('thrText').textContent = (nBands() > 1 ? 'B' + (sel + 1) + '  ' : '') + fmt(DEFS.threshold, bandThr(sel));
+    $('thrText').textContent = (nBands() > 1 && !isSpectral() ? 'B' + (sel + 1) + '  ' : '') + fmt(DEFS.threshold, bandThr(sel));
     const tw = V.timeWin;
     $('tTxt').textContent = tw < 1 ? Math.round(tw * 1000) + ' ms' : tw.toFixed(1) + ' s';
     $('zTxt').textContent = (Math.round(V.zoom * 10) / 10) + '×';
@@ -502,8 +683,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     $('tSl').style.setProperty('--p', (tv / 10) + '%');
     $('zSl').style.setProperty('--p', (zv / 10) + '%');
     const tag = $('scopeTag');
-    tag.style.display = nBands() > 1 ? 'block' : 'none';
-    tag.textContent = 'BAND ' + (sel + 1) + ' · ' + bandRange(sel);
+    tag.style.display = (nBands() > 1 || isSpectral()) ? 'block' : 'none';
+    tag.textContent = isSpectral() ? 'SPECTRAL · DETAIL ' + Math.round(P[ID.detail]) + '%' : 'BAND ' + (sel + 1) + ' · ' + bandRange(sel);
   }
 
   (function () {
@@ -537,9 +718,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     if (e.shiftKey) setTime(V.timeWin / f); else setZoom(V.zoom * f);
   }, { passive: false });
   // Spectral mode is planned; the switch is kept in the UI as agreed.
-  $('mSample').onclick = () => { $('mSample').setAttribute('aria-pressed', 'true'); $('mSpec').setAttribute('aria-pressed', 'false'); };
-  $('mSpec').onclick = () => { $('mSpec').setAttribute('aria-pressed', 'true'); $('mSample').setAttribute('aria-pressed', 'false'); };
-  $('mSpec').title = 'Spectral clipping is coming in a later version';
+  $('mSample').onclick = () => { if (isSpectral()) edit(ID.mode, 0); };
+  $('mSpec').onclick = () => { if (!isSpectral()) edit(ID.mode, 1); };
 
   // ==========================================================================
   // Multiband panel
@@ -831,6 +1011,37 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
     ctx.stroke();
   }
 
+  // ---------- spectral-mode display: what's clipped (accent) vs. what DETAIL keeps (opposite hue) ----------
+  const scMask = new Float32Array(4096);
+  function drawSpecClip(dt) {
+    const box = $('scbox'), w = box.clientWidth, h = box.clientHeight;
+    if (!w || !h) return;
+    const ctx = prep($('scCv'), w, h);
+    ctx.fillStyle = '#070707'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#151515';
+    [100, 1000, 10000].forEach((f) => ctx.fillRect(Math.round(fToX(f, w)), 0, 1, h));
+    ctx.fillStyle = '#5E5E5E'; ctx.font = '8px "Sui Generis", sans-serif';
+    [[100, '100'], [1000, '1k'], [10000, '10k']].forEach(([f, t]) => ctx.fillText(t, fToX(f, w) + 3, 10));
+    const yOf = (db) => h - 4 - (Math.max(-72, Math.min(6, db)) + 72) / 78 * (h - 18);
+    const level = (x) => { const f = xToF(x + 0.5, w), kf = f * FFTN / engineSr, k0 = Math.max(1, Math.min(FFTN / 2 - 2, Math.floor(kf))), t = kf - Math.floor(kf); return specDb[k0] * (1 - t) + specDb[k0 + 1] * t; };
+    const d = P[ID.detail] / 100, act = clipAct;
+    for (let x = 0; x < w; x++) {
+      // mask grid: 128 points, 20 Hz .. 20 kHz log-spaced (same axis as this display)
+      let m = 0;
+      if (specMask) { const g = (x + 0.5) / w * 127, g0 = Math.floor(g), g1 = Math.min(127, g0 + 1), u = g - g0; m = specMask[g0] * (1 - u) + specMask[g1] * u; }
+      if (!V.frozen) scMask[x] += (m - scMask[x]) * Math.min(1, dt * 15);
+      const mm = scMask[x];
+      const loud = mm * act, keep = (1 - mm) * d, rest = Math.max(0, 1 - loud - keep);
+      const c = [0, 1, 2].map((i) => Math.round(accentRGB[i] * loud + compRGB[i] * keep + 110 * rest));
+      const y = yOf(level(x));
+      ctx.fillStyle = 'rgba(' + c.join(',') + ',0.85)';
+      ctx.fillRect(x, y, 1.05, h - y);
+    }
+    ctx.beginPath();
+    for (let x = 0; x < w; x++) { const y = yOf(level(x)); if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.strokeStyle = 'rgba(230,230,230,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
   // ---------- meters ----------
   const mIn = { level: -120, hold: -120, holdAt: 0 }, mOut = { level: -120, hold: -120, holdAt: 0 };
   function updMeter(m, peak, dt, t) {
@@ -872,6 +1083,7 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   function applyAccent(rgb, from) {
     accentRGB = rgb; accent = toHex(rgb);
     document.documentElement.style.setProperty('--accent', accent);
+    { const [hh, ss, vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); compRGB = hsv2rgb((hh + 180) % 360, ss, vv); document.documentElement.style.setProperty('--comp', toHex(compRGB)); }
     if (from !== 'hex') $('hexIn').value = accent;
     if (from !== 'wheel' && from !== 'val') { [H, S, Vv] = rgb2hsv(rgb[0], rgb[1], rgb[2]); $('valSl').value = Math.round(Vv * 100); drawWheel(); }
     placeMarker();
@@ -927,13 +1139,30 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
   const rest = $('slotRest');
   rest.appendChild(buildKnob('threshold'));
   rest.appendChild(buildKnob('knee'));
+  { const dk = buildKnob('detail'); dk.classList.add('detailKn'); dk.querySelector('.ar').style.stroke = 'var(--comp)'; dk.querySelector('.lbl').style.color = 'var(--comp)'; rest.appendChild(dk); }
   const cw = document.createElement('div');
   cw.className = 'curve';
   cw.innerHTML = '<span>CURVE</span><canvas id="curveCv" aria-hidden="true"></canvas>';
   rest.appendChild(cw);
+  {
+    const sc = document.createElement('div');
+    sc.className = 'sc';
+    sc.innerHTML = '<div class="sch"><span>SPECTRUM</span><span class="lg"><span><i style="background:var(--accent)"></i>CLIPPED</span><span><i style="background:var(--comp)"></i>DETAIL KEPT</span></span></div>' +
+      '<div class="scbox" id="scbox"><canvas id="scCv" aria-hidden="true"></canvas></div>';
+    rest.appendChild(sc);
+  }
   rest.appendChild(buildKnob('outGain'));
 
   function refreshAll() {
+    const spec = isSpectral();
+    if (spec !== wasSpectral) {
+      // Spectral mode is one clipper over the whole signal: it uses band 1's threshold and knee.
+      if (spec) { selBeforeSpectral = sel; sel = 0; } else { sel = Math.min(selBeforeSpectral, nBands() - 1); }
+      wasSpectral = spec; ringBand = -1;
+    }
+    $('plugin').classList.toggle('spectral', spec);
+    $('mSample').setAttribute('aria-pressed', spec ? 'false' : 'true');
+    $('mSpec').setAttribute('aria-pressed', spec ? 'true' : 'false');
     if (sel >= nBands()) { sel = nBands() - 1; engine.setSel(sel); ringBand = -1; }
     renderKnobs(); renderBands(); renderOverlay();
   }
@@ -950,6 +1179,9 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
       const res = await engine.poll(band, fresh ? 0 : now, want, true);
       const t = performance.now(), dt = Math.min(0.1, (t - lastFrame) / 1000); lastFrame = t;
       if (res.sr && res.sr !== engineSr) { engineSr = res.sr; }
+      if (res.am !== undefined && res.am !== activeMode) { activeMode = res.am; ringBand = -1; }
+      specMask = res.sm || null;
+      $('switching').style.display = (isSpectral() ? 1 : 0) !== activeMode ? 'block' : 'none';
       // host-side parameter changes (automation, preset load)
       let changed = false;
       ORDER.forEach((id, i) => { const v = res.p[i]; if (!dragging.has(id) && v !== undefined && Math.abs(v - P[id]) > 1e-9) { P[id] = v; changed = true; } });
@@ -962,7 +1194,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
       }
       const box = $('scope');
       if (box.clientWidth !== lastW || box.clientHeight !== lastH) { lastW = box.clientWidth; lastH = box.clientHeight; renderOverlay(); positionBands(); }
-      drawScope(); drawCurve(); drawSpectrum();
+      drawScope(); drawCurve();
+      if (isSpectral()) drawSpecClip(dt); else drawSpectrum();
       drawMeter($('meterIn'), mIn); drawMeter($('meterOut'), mOut);
       if (!V.frozen && t - lastTxt > 120) {
         lastTxt = t;
@@ -974,7 +1207,8 @@ input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2
           if (a > 1e-4 && b > 1e-5 && a > b) { const d = 20 * Math.log10(a / b); if (d > gr) gr = d; }
         }
         $('grText').textContent = gr > 0.05 ? minus + gr.toFixed(1) + ' dB' : '0.0 dB';
-        $('clipLbl').textContent = nBands() > 1 ? 'CLIP B' + (sel + 1) : 'CLIP';
+        clipAct = Math.min(1, gr / 2);
+        $('clipLbl').textContent = nBands() > 1 && !isSpectral() ? 'CLIP B' + (sel + 1) : 'CLIP';
         $('clipDot').style.background = gr > 0.1 ? accent : '#2A2A2A';
         $('inPk').textContent = fmtPk(mIn.hold);
         $('outPk').textContent = fmtPk(mOut.hold);

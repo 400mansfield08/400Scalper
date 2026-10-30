@@ -77,7 +77,7 @@
     let env = 0;
 
     const st = {
-      N, H, latency: N - 1, centers, bandDb, mask,
+      N, H, latency: N - 1, centers, bandDb, mask, binMask, sr,
       range: 15,      // dB below the loudest band that still counts as LOUD
       detail: 1.0,    // 0..1
       process(x, T, knee) {

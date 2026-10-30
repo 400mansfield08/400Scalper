@@ -19,9 +19,11 @@ enum ParamId : clap_id
     kThr1    = 10,  // 10..13  dB
     kKnee1   = 20,  // 20..23  %
     kSolo1   = 30,  // 30..33  0/1 (monitoring only, not saved)
+    kMode    = 40,  // 0 = Sample, 1 = Spectral (changes latency -> host restart)
+    kDetail  = 41,  // Spectral mode detail preservation, %
 };
 
-enum class Unit { dB, Hz, Percent, Count, Slope, Toggle };
+enum class Unit { dB, Hz, Percent, Count, Slope, Toggle, Mode };
 
 struct ParamDef
 {
@@ -35,9 +37,9 @@ struct ParamDef
     bool saved;
 };
 
-inline const std::array<ParamDef, 19>& paramDefs()
+inline const std::array<ParamDef, 21>& paramDefs()
 {
-    static const std::array<ParamDef, 19> defs { {
+    static const std::array<ParamDef, 21> defs { {
         { kInGain,  "In Gain",          "Global",       -24.0, 24.0,    0.0,  Unit::dB,      false, true,  true  },
         { kOutGain, "Out Gain",         "Global",       -24.0, 24.0,    0.0,  Unit::dB,      false, true,  true  },
         { kBands,   "Bands",            "Multiband",      1.0,  4.0,    1.0,  Unit::Count,   true,  true,  true  },
@@ -57,11 +59,13 @@ inline const std::array<ParamDef, 19>& paramDefs()
         { kSolo1 + 1, "Solo 2",         "Band 2",         0.0,  1.0,    0.0,  Unit::Toggle,  true,  false, false },
         { kSolo1 + 2, "Solo 3",         "Band 3",         0.0,  1.0,    0.0,  Unit::Toggle,  true,  false, false },
         { kSolo1 + 3, "Solo 4",         "Band 4",         0.0,  1.0,    0.0,  Unit::Toggle,  true,  false, false },
+        { kMode,      "Mode",           "Global",         0.0,  1.0,    0.0,  Unit::Mode,    true,  true,  true  },
+        { kDetail,    "Detail",         "Spectral",       0.0, 100.0, 100.0,  Unit::Percent, false, true,  true  },
     } };
     return defs;
 }
 
-constexpr int kNumParams = 19;
+constexpr int kNumParams = 21;
 
 inline int paramIndex (clap_id id)
 {
@@ -91,6 +95,7 @@ inline void formatParam (int index, double v, char* out, uint32_t size)
         case Unit::Count:   std::snprintf (out, size, "%d", int (std::lround (v))); break;
         case Unit::Slope:   std::snprintf (out, size, "%s", v < 0.5 ? "6 dB/oct" : (v < 1.5 ? "12 dB/oct" : "24 dB/oct")); break;
         case Unit::Toggle:  std::snprintf (out, size, "%s", v >= 0.5 ? "On" : "Off"); break;
+        case Unit::Mode:    std::snprintf (out, size, "%s", v >= 0.5 ? "Spectral" : "Sample"); break;
     }
 }
 

@@ -14,7 +14,7 @@ static int failures = 0;
 #define CHECK(cond, ...) do { if (!(cond)) { std::printf ("FAIL: " __VA_ARGS__); std::printf ("\n"); ++failures; } else { std::printf ("ok:   " __VA_ARGS__); std::printf ("\n"); } } while (0)
 
 // ---- tiny host ----
-static int flushRequests = 0;
+static int flushRequests = 0, restartRequests = 0;
 static const clap_host_params kHostParams = {
     [] (const clap_host*, clap_param_rescan_flags) {},
     [] (const clap_host*, clap_id, clap_param_clear_flags) {},
@@ -27,7 +27,7 @@ static const void* hostGetExt (const clap_host*, const char* id)
 static const clap_host kHost = {
     CLAP_VERSION_INIT, nullptr, "test-host", "400", "", "1",
     hostGetExt,
-    [] (const clap_host*) {}, [] (const clap_host*) {}, [] (const clap_host*) {}
+    [] (const clap_host*) { ++restartRequests; }, [] (const clap_host*) {}, [] (const clap_host*) {}
 };
 
 struct EventList
@@ -81,7 +81,7 @@ int main()
     auto* lat    = static_cast<const clap_plugin_latency*> (p->get_extension (p, CLAP_EXT_LATENCY));
     auto* ports  = static_cast<const clap_plugin_audio_ports*> (p->get_extension (p, CLAP_EXT_AUDIO_PORTS));
     CHECK (params && state && lat && ports, "extensions present");
-    CHECK (params->count (p) == 19, "19 params");
+    CHECK (params->count (p) == 21, "21 params");
 
     char txt[64]; double back = 0;
     params->value_to_text (p, scalper::kXover2, 1500.0, txt, sizeof (txt));
@@ -160,6 +160,48 @@ int main()
     const std::string poll = scalper::Gui::pollJson (*plug, 0, 0, 1000, true);
     CHECK (init.find ("\"params\":[") != std::string::npos && init.find ("\"accent\":\"#") != std::string::npos, "init json (%zu bytes)", init.size());
     CHECK (poll.find ("\"v\":[") != std::string::npos && poll.find ("\"f\":[") != std::string::npos, "poll json (%zu bytes)", poll.size());
+
+    // ---- Spectral mode ----
+    restartRequests = 0;
+    plug->uiSetParam (scalper::kBands, 1);
+    plug->uiSetParam (scalper::kMode, 1);
+    {
+        OutEvents o; EventList e;
+        params->flush (p, &e.in, &o.out);
+    }
+    CHECK (restartRequests == 1, "switching to Spectral requests a host restart (%d)", restartRequests);
+    p->stop_processing (p); p->deactivate (p);
+    CHECK (p->activate (p, fs, 32, 1024), "re-activate in Spectral mode");
+    const uint32_t L2 = lat->get (p);
+    CHECK (L2 == L + 511, "spectral latency %u samples (%.2f ms)", L2, 1000.0 * L2 / fs);
+    p->start_processing (p);
+    double peak2 = 0.0;
+    for (int block = 0; block < 300; ++block)
+    {
+        EventList el;
+        for (uint32_t i = 0; i < N; ++i)
+        {
+            const double x = 0.9 * std::sin (phase) + 0.05 * std::sin (40.0 * phase);
+            phase += 2 * 3.14159265358979 * 110.0 / fs;
+            inL[i] = float (x); inR[i] = float (x);
+        }
+        clap_process pr {};
+        pr.frames_count = N; pr.steady_time = -1;
+        pr.audio_inputs = &ain; pr.audio_outputs = &aout;
+        pr.audio_inputs_count = 1; pr.audio_outputs_count = 1;
+        pr.in_events = &el.in; pr.out_events = &oe.out;
+        p->process (p, &pr);
+        if (block > 20) for (uint32_t i = 0; i < N; ++i) peak2 = std::max (peak2, double (std::fabs (outL[i])));
+    }
+    double og = 0; params->get_value (p, scalper::kOutGain, &og);
+    const double ceilLin = 0.50119 * std::pow (10.0, og / 20.0);
+    CHECK (peak2 <= ceilLin + 1e-5 && peak2 > 0.3 * ceilLin, "spectral output peak %.5f within the threshold (%.5f incl. out gain)", peak2, ceilLin);
+    const std::string poll2 = scalper::Gui::pollJson (*plug, 0, 0, 100, false);
+    CHECK (poll2.find ("\"am\":1") != std::string::npos && poll2.find ("\"sm\":[") != std::string::npos, "UI receives spectral mode + clip mask");
+    restartRequests = 0;
+    plug->uiSetParam (scalper::kMode, 0);
+    { OutEvents o; EventList e; params->flush (p, &e.in, &o.out); }
+    CHECK (restartRequests == 1, "switching back to Sample requests a restart");
 
     p->stop_processing (p);
     p->deactivate (p);
