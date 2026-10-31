@@ -6,43 +6,8 @@
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
-#include <clap/clap.h>
 
 namespace scalper {
-
-// Single-producer / single-consumer queue of UI -> host parameter events.
-struct UiEvent
-{
-    enum Type : uint8_t { Value, Begin, End } type;
-    clap_id id;
-    double value;
-};
-
-class UiEventQueue
-{
-public:
-    bool push (const UiEvent& e)
-    {
-        const uint32_t w = write.load (std::memory_order_relaxed);
-        const uint32_t next = (w + 1) % kSize;
-        if (next == read.load (std::memory_order_acquire)) return false; // full
-        buf[w] = e;
-        write.store (next, std::memory_order_release);
-        return true;
-    }
-    bool pop (UiEvent& e)
-    {
-        const uint32_t r = read.load (std::memory_order_relaxed);
-        if (r == write.load (std::memory_order_acquire)) return false;
-        e = buf[r];
-        read.store ((r + 1) % kSize, std::memory_order_release);
-        return true;
-    }
-private:
-    static constexpr uint32_t kSize = 2048;
-    UiEvent buf[kSize] {};
-    std::atomic<uint32_t> write { 0 }, read { 0 };
-};
 
 // Decimated min/max history for the scope, one ring per band.
 // Each entry covers kDecim samples: input min/max (pre-clip, latency aligned) and output min/max.
@@ -54,13 +19,23 @@ public:
     static constexpr int kDecim = 4;
     static constexpr int kBands = 4;
 
+    // Called on activate. The UI keeps reading while the host restarts the plugin (e.g. after
+    // a mode switch changed the latency), so: the rings are only reallocated when they must grow,
+    // and 'epoch' tells the UI that the history restarted (count went back to 0).
     void prepare (double sampleRate)
     {
+        const size_t need = size_t (std::ceil (7.0 * std::max (sampleRate, 48000.0) / kDecim));
+        if (need > allocated)
+        {
+            for (auto& r : rings) r.assign (need, VizEntry { 0, 0, 0, 0 });
+            allocated = need;
+        }
         capacity = size_t (std::ceil (7.0 * sampleRate / kDecim));
-        for (auto& r : rings) r.assign (capacity, VizEntry { 0, 0, 0, 0 });
-        count.store (0);
+        count.store (0, std::memory_order_release);
         entryRate = sampleRate / kDecim;
+        epoch.fetch_add (1, std::memory_order_release);
     }
+    uint32_t getEpoch() const { return epoch.load (std::memory_order_acquire); }
 
     // audio thread
     void push (const VizEntry* perBand)
@@ -94,7 +69,8 @@ public:
     double rate() const { return entryRate; }
 
 private:
-    size_t capacity = 0;
+    size_t capacity = 0, allocated = 0;
+    std::atomic<uint32_t> epoch { 0 };
     double entryRate = 12000.0;
     std::vector<VizEntry> rings[kBands];
     std::atomic<uint64_t> count { 0 };

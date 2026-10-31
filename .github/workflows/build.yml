@@ -18,12 +18,24 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DIPLUG_DEPLOY_PLUGINS=OFF
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel 2>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # Surface compiler errors as annotations (readable without the raw log).
+            $errs = Select-String -Path build.log -Pattern ': (fatal )?error ' | ForEach-Object { $_.Line.Trim() } | Select-Object -Unique -First 40
+            $i = 0
+            foreach ($e in $errs) { if ($i -lt 9) { Write-Output "::error::$e" }; $i++ }
+            $all = ($errs -join '%0A')
+            if ($all) { Write-Output "::error title=All build errors::$all" }
+            exit $code
+          }
 
-      - name: Unit + host tests
+      - name: Engine tests
         run: ctest --test-dir build -C Release --output-on-failure
 
       - name: CLAP validator
@@ -32,24 +44,33 @@ jobs:
           Invoke-WebRequest -Uri https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-windows.zip -OutFile cv.zip
           Expand-Archive cv.zip -DestinationPath cv
           $exe = Get-ChildItem cv -Recurse -Filter clap-validator.exe | Select-Object -First 1
-          & $exe.FullName validate build/Release/400Scalper.clap
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $clap = Get-ChildItem build -Recurse -Filter 400Scalper.clap | Select-Object -First 1
+          Write-Output "Validating $($clap.FullName)"
+          & $exe.FullName validate $clap.FullName 2>&1 | Tee-Object -FilePath validator.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $fails = Select-String -Path validator.log -Pattern 'FAILED|failed' | ForEach-Object { $_.Line.Trim() } | Select-Object -First 9
+            foreach ($f in $fails) { Write-Output "::error title=clap-validator::$f" }
+            exit $code
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $clap.FullName dist/400Scalper.clap
 
       - name: Upload plugin
         uses: actions/upload-artifact@v4
         with:
           name: 400Scalper-windows
-          path: build/Release/400Scalper.clap
+          path: dist/400Scalper.clap
           if-no-files-found: error
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Release/400Scalper.clap
+          files: dist/400Scalper.clap
 
   linux:
-    name: Linux (DSP tests + validator, no UI)
+    name: Linux (engine tests)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -59,8 +80,3 @@ jobs:
         run: cmake --build build --parallel
       - name: Tests
         run: ctest --test-dir build --output-on-failure
-      - name: CLAP validator
-        run: |
-          curl -sSL -o cv.tar.gz https://github.com/free-audio/clap-validator/releases/download/0.3.2/clap-validator-0.3.2-ubuntu-18.04.tar.gz
-          mkdir cv && tar xzf cv.tar.gz -C cv
-          ./cv/clap-validator validate build/400Scalper.clap
