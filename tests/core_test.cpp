@@ -149,6 +149,41 @@ int main()
         CHECK (rms > 0.1 && rms < 0.16, "solo band 1 passes the 100 Hz tone (rms %.3f)", rms);
     }
 
+    // ---- BYPASS: output = input delayed by the reported latency, in both modes ----
+    for (int mode : { 0, 1 })
+    {
+        Rig r; r.p[kMode] = mode; r.p[kBypass] = 1; r.p[kInGain] = 12; r.prepare();
+        const int L = r.proc.latencySamples (mode);
+        std::vector<double> hist;
+        double err = 0; long n = 0;
+        for (int b = 0; b < 40; ++b)
+        {
+            r.block ([&] (int, double& l, double& rr) { const double x = 0.9 * std::sin (0.031 * double (n++)); l = rr = x; hist.push_back (x); });
+            for (int i = 0; i < N; ++i)
+            {
+                const long k = long (b) * N + i - L;
+                if (b >= 4) err = std::max (err, std::fabs (r.outL[size_t (i)] - (k >= 0 ? hist[size_t (k)] : 0.0)));
+            }
+        }
+        CHECK (err < 1e-6, "%s BYPASS = input delayed by %d samples (max error %.2g)", mode ? "Spectral" : "Sample", L, err);
+    }
+
+    // ---- AUTO GAIN: +12 dB In below the threshold leaves the level unchanged ----
+    {
+        auto level = [&] (bool autoGain) {
+            Rig r; r.p[kInGain] = 12; r.p[kAutoGain] = autoGain ? 1 : 0; r.p[kThr1] = 0; r.prepare();
+            double pk = 0, ph = 0;
+            for (int b = 0; b < 60; ++b)
+            {
+                r.block ([&] (int, double& l, double& rr) { l = rr = 0.1 * std::sin (ph); ph += 2 * kPi * 300 / fs; });
+                if (b > 20) for (int i = 0; i < N; ++i) pk = std::max (pk, std::fabs (r.outL[size_t (i)]));
+            }
+            return pk;
+        };
+        const double on = level (true), off = level (false);
+        CHECK (std::fabs (on - 0.1) < 1e-3 && std::fabs (off - 0.398) < 5e-3, "AUTO GAIN: +12 dB In -> out peak %.4f (on) vs %.4f (off)", on, off);
+    }
+
     // ---- viz history fills ----
     {
         Rig r; r.prepare();

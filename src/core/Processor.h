@@ -17,6 +17,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace scalper {
 
@@ -49,6 +50,10 @@ public:
         for (auto& c : specClip) c.prepare (sr);
         for (auto& d : specVizIn) d.init (ChannelEngine::latencySamples() + ceiling.latencySamples());
         for (auto& d : deltaDelay) d.init (ceiling.latencySamples());
+        dryLen = latencySamples (1) + 1;                     // the longest (Spectral) delay
+        for (auto& d : dry) d.assign (size_t (dryLen), 0.0);
+        dryPos = 0;
+        bypassMix = p[kBypass] >= 0.5 ? 1.0 : 0.0;
         const int L = ceiling.latencySamples();
         for (auto& band : vizDelay) for (auto& d : band) d.init (L);
         viz.prepare (sr);
@@ -89,7 +94,11 @@ public:
         }
 
         // ---- parameter snapshot (once per block; smoothed per sample below) ----
-        const double tIn = dbToLin (p[kInGain]), tOut = dbToLin (p[kOutGain]);
+        // Auto Gain: the output is turned down by whatever In Gain adds, so In only sets how hard
+        // the clipper is driven and the level stays put when nothing clips.
+        const bool autoGain = p[kAutoGain] >= 0.5;
+        const double tIn = dbToLin (p[kInGain]), tOut = dbToLin (p[kOutGain] - (autoGain ? p[kInGain] : 0.0));
+        const double tBypass = p[kBypass] >= 0.5 ? 1.0 : 0.0;
         int numBands = std::clamp (int (std::lround (p[kBands])), 1, kMaxBands);
         const int slopeDb = slopeDbFromParam (p[kSlope]);
         for (int i = 0; i < kMaxXovers; ++i)
@@ -127,8 +136,8 @@ public:
                 curves[b].set (thr[b], knee[b]);
             }
 
-            const double xL = double (in[0][i]) * inGain;
-            const double xR = (stereoIn ? double (in[1][i]) : double (in[0][i])) * inGain;
+            const double rawL = double (in[0][i]), rawR = stereoIn ? double (in[1][i]) : rawL;
+            const double xL = rawL * inGain, xR = rawR * inGain;
 
             // ---- mode switching: only one clipper ever runs ----
             if (pendingMode < 0 && wantedMode != procMode.load (std::memory_order_relaxed))
@@ -200,8 +209,17 @@ public:
                 const double dTL = deltaDelay[0].process (float (twinL)), dTR = deltaDelay[1].process (float (twinR));
                 if (deltaOn) { yL = dTL - yL; yR = dTR - yR; }
             }
-            yL *= modeGain; yR *= modeGain;
-            const double oL = yL * outGain, oR = yR * outGain;
+            // BYPASS: the untouched input, delayed by the current mode's latency so that toggling
+            // it doesn't shift the audio in time; 10 ms crossfade. Everything keeps running.
+            dry[0][size_t (dryPos)] = rawL; dry[1][size_t (dryPos)] = rawR;
+            int rd = dryPos - latencySamples (procMode.load (std::memory_order_relaxed));
+            if (rd < 0) rd += dryLen;
+            const double dL = dry[0][size_t (rd)], dR = dry[1][size_t (rd)];
+            if (++dryPos >= dryLen) dryPos = 0;
+            bypassMix += (tBypass - bypassMix) * smoothCoef;
+            if (std::fabs (tBypass - bypassMix) < 1e-6) bypassMix = tBypass;
+            const double oL = modeGain * (yL * outGain * (1.0 - bypassMix) + dL * bypassMix);
+            const double oR = modeGain * (yR * outGain * (1.0 - bypassMix) + dR * bypassMix);
             meterIn.raise (float (std::max (std::fabs (xL), std::fabs (xR))));
             meterOut.raise (float (std::max (std::fabs (oL), std::fabs (oR))));
             spectrum.push (float (0.5 * (xL + xR)));
@@ -238,6 +256,9 @@ private:
     double modeGain = 1.0, modeFadeStep = 0.002;
     double inGain = 1.0, outGain = 1.0, thr[kMaxBands] { 0.5, 0.5, 0.5, 0.5 };
     double smoothCoef = 0.001;
+    std::vector<double> dry[2];
+    int dryLen = 1, dryPos = 0;
+    double bypassMix = 0.0;
     IntDelay vizDelay[kMaxBands][4];
     VizEntry vizAcc[kMaxBands] {};
     int vizCount = 0;

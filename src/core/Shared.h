@@ -19,13 +19,23 @@ public:
     static constexpr int kDecim = 4;
     static constexpr int kBands = 4;
 
+    // Called on activate. The UI keeps reading while the host restarts the plugin (e.g. after
+    // a mode switch changed the latency), so: the rings are only reallocated when they must grow,
+    // and 'epoch' tells the UI that the history restarted (count went back to 0).
     void prepare (double sampleRate)
     {
+        const size_t need = size_t (std::ceil (7.0 * std::max (sampleRate, 48000.0) / kDecim));
+        if (need > allocated)
+        {
+            for (auto& r : rings) r.assign (need, VizEntry { 0, 0, 0, 0 });
+            allocated = need;
+        }
         capacity = size_t (std::ceil (7.0 * sampleRate / kDecim));
-        for (auto& r : rings) r.assign (capacity, VizEntry { 0, 0, 0, 0 });
-        count.store (0);
+        count.store (0, std::memory_order_release);
         entryRate = sampleRate / kDecim;
+        epoch.fetch_add (1, std::memory_order_release);
     }
+    uint32_t getEpoch() const { return epoch.load (std::memory_order_acquire); }
 
     // audio thread
     void push (const VizEntry* perBand)
@@ -59,7 +69,8 @@ public:
     double rate() const { return entryRate; }
 
 private:
-    size_t capacity = 0;
+    size_t capacity = 0, allocated = 0;
+    std::atomic<uint32_t> epoch { 0 };
     double entryRate = 12000.0;
     std::vector<VizEntry> rings[kBands];
     std::atomic<uint64_t> count { 0 };

@@ -27,7 +27,8 @@ private:
     Meter *meterIn = nullptr, *meterOut = nullptr;
     Scope* scope = nullptr;
     Knob *knIn = nullptr, *knThr = nullptr, *knKnee = nullptr, *knDetail = nullptr, *knOut = nullptr;
-    DeltaPill* delta = nullptr;
+    Pill* delta = nullptr;
+    Pill* autoGain = nullptr;
     Curve* curve = nullptr;
     BandPanel* bands = nullptr;
     SpecClip* specClip = nullptr;
@@ -55,9 +56,10 @@ private:
         meterIn  = add<Meter> (g, false);
         scope    = add<Scope> (g);
         meterOut = add<Meter> (g, true);
+        autoGain = add<Pill> (g, int (kAutoGain), "AUTO GAIN");
         knIn     = add<Knob> (g, KnobKind::In);
         bands    = add<BandPanel> (g);
-        delta    = add<DeltaPill> (g);
+        delta    = add<Pill> (g, int (kDelta), "\xCE\x94 DELTA");
         knThr    = add<Knob> (g, KnobKind::Threshold);
         knKnee   = add<Knob> (g, KnobKind::Knee);
         knDetail = add<Knob> (g, KnobKind::Detail);
@@ -96,6 +98,9 @@ private:
         meterOut->SetTargetAndDrawRECTs (L.meterOut);
         setKnob (knIn, L.knIn);
         delta->SetTargetAndDrawRECTs (L.delta);
+        autoGain->setLabel (L.compact ? "AUTO" : "AUTO GAIN");
+        autoGain->SetTargetAndDrawRECTs (L.autoGain);
+        autoGain->SetRECT (L.autoGain.GetHPadded (18));   // the label is wider than a compact knob column
         setKnob (knThr, L.knThr);
         setKnob (knKnee, L.knKnee);
         curve->SetTargetAndDrawRECTs (L.curve);

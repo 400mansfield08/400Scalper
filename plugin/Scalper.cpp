@@ -17,7 +17,7 @@ using namespace iplug::igraphics;
 
 namespace {
 constexpr int kStateMagic = 0x34305353;   // "SS04"
-constexpr int kStateVersion = 1;
+constexpr int kStateVersion = 2;
 
 // Display helpers for the host's generic parameter view.
 void displayDb (double v, WDL_String& s) { s.SetFormatted (32, "%+.1f", std::fabs (v) < 0.05 ? 0.0 : v); }
@@ -132,6 +132,27 @@ bool Scalper::stateSave (const clap_ostream* stream) noexcept
     return true;
 }
 
+bool Scalper::paramsInfo (uint32_t paramIdx, clap_param_info* pInfo) const noexcept
+{
+    if (paramIdx >= uint32_t (kNumParams) || ! pInfo) return false;
+    const IParam* p = GetParam (int (paramIdx));
+    const bool isDouble = p->Type() == IParam::kTypeDouble;
+    clap_param_info_flags flags = CLAP_PARAM_REQUIRES_PROCESS;
+    if (! isDouble) flags |= CLAP_PARAM_IS_STEPPED;
+    if (p->GetCanAutomate()) flags |= CLAP_PARAM_IS_AUTOMATABLE;
+    if (p->Type() == IParam::kTypeEnum) flags |= CLAP_PARAM_IS_ENUM;
+    if (int (paramIdx) == kBypass) flags |= CLAP_PARAM_IS_BYPASS;   // lets the host's bypass use ours
+    pInfo->id = paramIdx;
+    pInfo->flags = flags;
+    pInfo->cookie = nullptr;
+    std::snprintf (pInfo->name, sizeof (pInfo->name), "%s", p->GetName());
+    std::snprintf (pInfo->module, sizeof (pInfo->module), "%s", p->GetGroup());
+    pInfo->min_value = isDouble ? 0.0 : p->GetMin();
+    pInfo->max_value = isDouble ? 1.0 : p->GetMax();
+    pInfo->default_value = p->GetDefault (isDouble);
+    return true;
+}
+
 bool Scalper::paramsValueToText (clap_id paramIdx, double value, char* display, uint32_t size) noexcept
 {
     const IParam* p = GetParam (int (paramIdx));
@@ -180,7 +201,9 @@ bool Scalper::SerializeState (IByteChunk& chunk) const
 {
     chunk.Put (&kStateMagic);
     chunk.Put (&kStateVersion);
-    if (! SerializeParams (chunk)) return false;
+    const int count = kNumParams;
+    chunk.Put (&count);
+    for (int i = 0; i < kNumParams; ++i) { const double v = GetParam (i)->Value(); chunk.Put (&v); }
     const int sel = selectedBand.load();
     chunk.Put (&sel);
     return true;
@@ -193,13 +216,24 @@ int Scalper::UnserializeState (const IByteChunk& chunk, int startPos)
     if (pos < 0 || magic != kStateMagic) return unserializeLegacy (chunk, startPos);
     pos = chunk.Get (&version, pos);
     if (pos < 0) return -1;
-    pos = UnserializeParams (chunk, pos);
-    if (pos < 0) return pos;
+    // v1 (0.3.0) stored the first 22 parameters with no count; v2 stores the count, so a state
+    // from an older version leaves parameters added since then at their defaults.
+    int count = 22;
+    if (version >= 2) { pos = chunk.Get (&count, pos); if (pos < 0) return -1; }
+    for (int i = 0; i < kNumParams; ++i) GetParam (i)->SetToDefault();
+    for (int i = 0; i < count; ++i)
+    {
+        double v = 0;
+        pos = chunk.Get (&v, pos);
+        if (pos < 0) return -1;
+        if (i < kNumParams) GetParam (i)->Set (clampParam (i, v));
+    }
     int sel = 0;
     const int p2 = chunk.Get (&sel, pos);
     if (p2 >= 0) { selectedBand.store (std::clamp (sel, 0, kMaxBands - 1)); pos = p2; }
     for (int b = 0; b < kMaxBands; ++b) GetParam (kSolo1 + b)->Set (0.0);
     GetParam (kDelta)->Set (0.0);
+    OnParamReset (kPresetRecall);
     return pos;
 }
 

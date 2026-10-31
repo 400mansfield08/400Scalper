@@ -315,7 +315,20 @@ public:
     // ---- scope view ----
     double zoom = 1.0, timeWin = 3.0;
     bool follow = true, frozen = false;
-    void setZoom (double z) { zoom = std::clamp (z, 1.0, 16.0); }
+    static constexpr double kZoomMin = 0.25, kZoomMax = 16.0;
+    void setZoom (double z) { zoom = std::clamp (z, kZoomMin, kZoomMax); }
+    // FIT: zoom so the loudest input in the visible time window fills the scope.
+    void fitZoom()
+    {
+        double pk = 0;
+        const uint64_t span = std::min<uint64_t> (now - haveFrom, uint64_t (timeWin * vizRate));
+        for (uint64_t i = 1; i <= span && cap; ++i)
+        {
+            const auto& e = ring[size_t ((now - i) % cap)];
+            pk = std::max ({ pk, double (std::fabs (e.inMin)), double (std::fabs (e.inMax)), double (std::fabs (e.outMin)), double (std::fabs (e.outMax)) });
+        }
+        setZoom (pk > 1e-4 ? 1.15 / (1.05 * pk) : 1.0);
+    }
     void setTime (double t) { timeWin = std::clamp (t, 0.05, 6.0); }
 
     // ---- scope history (selected band), same layout as the audio-side VizHistory ----
@@ -358,7 +371,11 @@ public:
         engineSr = proc.currentSampleRate.load();
         vizRate = proc.viz.rate();
         const int band = spec ? 0 : sel();
-        const bool fresh = ringBand != band || cap != size_t (std::ceil (vizRate * 6.5));
+        // The history restarts when the host re-activates the plugin (e.g. the restart after a
+        // mode switch). Start over instead of waiting for the new count to catch up.
+        const uint32_t ep = proc.viz.getEpoch();
+        bool fresh = ringBand != band || cap != size_t (std::ceil (vizRate * 6.5)) || ep != lastEpoch;
+        lastEpoch = ep;
         if (fresh)
         {
             cap = size_t (std::ceil (vizRate * 6.5));
@@ -368,7 +385,13 @@ public:
         if (! frozen)
         {
             uint64_t from = 0;
-            const uint64_t newNow = proc.viz.read (band, fresh ? 0 : now, cap, scratch, from);
+            uint64_t newNow = proc.viz.read (band, fresh ? 0 : now, cap, scratch, from);
+            if (! fresh && newNow < now)   // went backwards without an epoch change: resync
+            {
+                std::fill (ring.begin(), ring.end(), VizEntry { 0, 0, 0, 0 });
+                newNow = proc.viz.read (band, 0, cap, scratch, from);
+                fresh = true;
+            }
             if (fresh) { now = from; haveFrom = from; }
             if (from > now) for (uint64_t i = now; i < from; ++i) ring[size_t (i % cap)] = { 0, 0, 0, 0 };
             uint64_t idx = from;
@@ -392,6 +415,7 @@ public:
                 const double a = std::max (std::fabs (e.inMin), std::fabs (e.inMax)), b = std::max (std::fabs (e.outMin), std::fabs (e.outMax));
                 if (a > 1e-4 && b > 1e-5 && a > b) gr = std::max (gr, 20 * std::log10 (a / b));
             }
+            if (P (kBypass) >= 0.5) gr = 0;
             grDb = gr;
             clipAct = std::min (1.0, gr / 2);
         }
@@ -412,6 +436,7 @@ private:
     bool pendingSave = false;
     double lastTxt = -1e9;
     int lastProcMode = -1;
+    uint32_t lastEpoch = 0;
     std::vector<VizEntry> scratch;
     std::array<float, kFft> hann {}, buf {};
     std::vector<std::complex<float>> fftBuf = std::vector<std::complex<float>> (kFft);

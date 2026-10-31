@@ -23,6 +23,8 @@ enum ParamIdx : int
     kMode,                          // 0 = Sample, 1 = Spectral (changes latency)
     kDetail,                        // Spectral mode detail preservation, %
     kDelta,                         // listen to what is being clipped (monitoring only, not saved)
+    kBypass,                        // latency-compensated bypass (v0.4)
+    kAutoGain,                      // output follows -In Gain, so In only drives the clipper (v0.4)
     kNumParams
 };
 
@@ -63,6 +65,8 @@ inline const std::array<ParamDef, kNumParams>& paramDefs()
         { "Mode",            "Global",      0.0,  1.0,      0.0, Unit::Mode,    true,  true  },
         { "Detail",          "Spectral",    0.0, 100.0,   100.0, Unit::Percent, true,  true  },
         { "Delta",           "Global",      0.0,  1.0,      0.0, Unit::Toggle,  false, false },
+        { "Bypass",          "Global",      0.0,  1.0,      0.0, Unit::Toggle,  true,  true  },
+        { "Auto Gain",       "Global",      0.0,  1.0,      0.0, Unit::Toggle,  true,  true  },
     } };
     return defs;
 }

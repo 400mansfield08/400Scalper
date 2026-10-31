@@ -19,6 +19,7 @@ struct Rects
     IRECT meterIn, scope, meterOut;
     IRECT knIn, knThr, knKnee, knDetail, knOut;     // knob columns below the DELTA row
     IRECT delta;                                     // the DELTA pill row above THRESHOLD
+    IRECT autoGain;                                  // the AUTO GAIN pill row above IN
     IRECT curve;                                     // CURVE label + square
     IRECT mb, sc;                                    // band panel (Sample) / spectrum (Spectral)
     float knobW = 80, curveS = 84;
@@ -70,7 +71,7 @@ inline Rects computeLayout (float W, float H, bool spectral)
     {
         switch (k)
         {
-            case In:     knob (r.knIn); break;
+            case In:     r.autoGain = IRECT (x, knobTop, x + r.knobW, knobTop + 16); knob (r.knIn); break;
             case Thr:    r.delta = IRECT (x, knobTop, x + r.knobW, knobTop + 16); knob (r.knThr); break;
             case Knee:   knob (r.knKnee); break;
             case Detail: knob (r.knDetail); break;

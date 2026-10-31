@@ -125,10 +125,26 @@ public:
         const float lblX = valR - valW - 8 - lblW;
         m.tk.draw (g, clipLbl.c_str(), lblX, cy, 11, col::muted, 0.08f);
         g.FillCircle (m.grDb > 0.1 ? m.accent : col::off, lblX - 8 - 4, cy, 4);
-        const float clipL = lblX - 8 - 8;
+        // BYPASS (left of the CLIP readout): power icon + label, filled with the accent when on
+        const bool byp = m.P (kBypass) >= 0.5;
+        const bool iconOnly = m.L.compact;   // narrow windows: power icon only
+        const float bpTextW = m.tk.width (g, "BYPASS", 10, 0.08f);
+        const float bpW = iconOnly ? 32.f : 10 + 12 + 7 + bpTextW + 11, bpH = 28;
+        const float bpGap = m.L.compact ? 12.f : 18.f;
+        bypassBtn = IRECT (lblX - 16 - bpGap - bpW, cy - bpH / 2, lblX - 16 - bpGap, cy + bpH / 2);
+        const bool bpHover = GetMouseIsOver() && bypassBtn.Contains (hx, hy);
+        if (byp) box (g, bypassBtn, m.accent, m.accent, 6);
+        else box (g, bypassBtn, col::panel, bpHover ? rgb (0x4A4A4A) : col::b262, 6);
+        const IColor ic = byp ? col::bg : (bpHover ? col::text : col::muted);
+        const float icx = iconOnly ? bypassBtn.MW() : bypassBtn.L + 10 + 6, icy = cy;
+        g.PathClear(); g.PathArc (icx, icy, 5.5f, 40, 320); g.PathStroke (IPattern (ic), 1.6f, roundCaps());
+        g.DrawLine (ic, icx, icy - 7, icx, icy - 1.5f, nullptr, 1.6f);
+        if (! iconOnly) m.tk.draw (g, "BYPASS", icx + 6 + 7, cy, 10, ic, 0.08f);
+        const float clipL = bypassBtn.L;
 
         // SAMPLE / SPECTRAL segmented switch, spaced evenly between wordmark and readout
-        const float bw0 = m.tk.width (g, "SAMPLE", 11, 0.08f) + 24, bw1 = m.tk.width (g, "SPECTRAL", 11, 0.08f) + 24;
+        const float segPad = m.L.compact ? 14.f : 24.f;
+        const float bw0 = m.tk.width (g, "SAMPLE", 11, 0.08f) + segPad, bw1 = m.tk.width (g, "SPECTRAL", 11, 0.08f) + segPad;
         const float segW = 3 + bw0 + 2 + bw1 + 3, segH = 34;
         const float freeL = wordRect.R - 6, freeR = clipL;
         const float sx = freeL + std::max (0.f, (freeR - freeL - segW) * 0.5f);
@@ -147,17 +163,20 @@ public:
     void OnMouseDown (float x, float y, const IMouseMod&) override
     {
         if (wordRect.Contains (x, y)) { m.pickerOpen = ! m.pickerOpen; return; }
+        if (bypassBtn.Contains (x, y)) { m.edit (kBypass, m.P (kBypass) >= 0.5 ? 0 : 1); return; }
         if (btn[0].Contains (x, y) && m.spectral()) m.edit (kMode, 0);
         if (btn[1].Contains (x, y) && ! m.spectral()) m.edit (kMode, 1);
     }
     void OnMouseOver (float x, float y, const IMouseMod& mod) override
     {
         IControl::OnMouseOver (x, y, mod);
-        cursor (wordRect.Contains (x, y) || btn[0].Contains (x, y) || btn[1].Contains (x, y) ? ECursor::HAND : ECursor::ARROW);
+        hx = x; hy = y;
+        cursor (wordRect.Contains (x, y) || btn[0].Contains (x, y) || btn[1].Contains (x, y) || bypassBtn.Contains (x, y) ? ECursor::HAND : ECursor::ARROW);
     }
-    void OnMouseOut() override { IControl::OnMouseOut(); cursor (ECursor::ARROW); }
+    void OnMouseOut() override { IControl::OnMouseOut(); hx = hy = -1; cursor (ECursor::ARROW); }
 private:
-    IRECT wordRect, btn[2];
+    IRECT wordRect, btn[2], bypassBtn;
+    float hx = -1, hy = -1;
 };
 
 // ---------------------------------------------------------------------------
@@ -304,30 +323,38 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Δ DELTA pill above THRESHOLD: listen to only what is being clipped.
-class DeltaPill : public Base
+// Small toggle pill above a knob: Δ DELTA (above THRESHOLD) and AUTO GAIN (above IN).
+class Pill : public Base
 {
 public:
-    using Base::Base;
+    Pill (Model& model, int param, const char* text) : Base (model), paramId (param), label (text) {}
+    void setLabel (const char* text) { label = text; }
     void Draw (IGraphics& g) override
     {
-        const char* txt = "\xCE\x94 DELTA";
-        const float w = m.tk.width (g, txt, 8, 0.12f) + 14;
+        const float w = m.tk.width (g, label, 8, 0.12f) + 14;
         pill = IRECT (mRECT.MW() - w / 2, mRECT.T, mRECT.MW() + w / 2, mRECT.T + 16);
-        const bool on = m.P (kDelta) >= 0.5;
-        const bool hover = GetMouseIsOver();
+        const bool on = m.P (paramId) >= 0.5;
+        const bool hover = GetMouseIsOver() && pill.Contains (hx, hy);
         if (on) box (g, pill, m.accent, m.accent, 8);
         else box (g, pill, col::panel14, hover ? rgb (0x4A4A4A) : col::b333, 8);
-        m.tk.draw (g, txt, pill.MW(), pill.MH() + 0.5f, 8, on ? col::bg : (hover ? col::text : col::muted), 0.12f, EAlign::Center);
+        m.tk.draw (g, label, pill.MW(), pill.MH() + 0.5f, 8, on ? col::bg : (hover ? col::text : col::muted), 0.12f, EAlign::Center);
     }
     void OnMouseDown (float x, float y, const IMouseMod&) override
     {
-        if (pill.Contains (x, y)) m.edit (kDelta, m.P (kDelta) >= 0.5 ? 0 : 1);
+        if (pill.Contains (x, y)) m.edit (paramId, m.P (paramId) >= 0.5 ? 0 : 1);
     }
-    void OnMouseOver (float x, float y, const IMouseMod& mod) override { IControl::OnMouseOver (x, y, mod); cursor (ECursor::HAND); }
-    void OnMouseOut() override { IControl::OnMouseOut(); cursor (ECursor::ARROW); }
+    void OnMouseOver (float x, float y, const IMouseMod& mod) override
+    {
+        IControl::OnMouseOver (x, y, mod);
+        hx = x; hy = y;
+        cursor (pill.Contains (x, y) ? ECursor::HAND : ECursor::ARROW);
+    }
+    void OnMouseOut() override { IControl::OnMouseOut(); hx = hy = -1; cursor (ECursor::ARROW); }
 private:
+    int paramId;
+    const char* label;
     IRECT pill;
+    float hx = -1, hy = -1;
 };
 
 // ---------------------------------------------------------------------------

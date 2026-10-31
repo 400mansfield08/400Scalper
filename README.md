@@ -10,10 +10,13 @@ A transparent soft-knee clipper, as a CLAP plugin. Made for Always 400.
   - **Spectral**: a detail-preserving clipper. A 26-band ear-shaped (Mel) filter bank works out which parts of the sound are loud and which are quiet detail. Only the loud part is clipped; the **DETAIL** knob (0–100 %) sets how much of the quiet detail rides through untouched. Nothing passes the threshold. In tests, 100 % of a quiet 4 kHz tone survives under a hard-clipped 60 Hz tone, against 26 % with the plain clipper. Delay: 579 samples at 48 kHz (12 ms).
   - Only one mode runs at a time. The audio switches immediately with a 10 ms fade out and in, and the other engine is stopped and reset. The two modes have different delays, so the plugin also asks the host to restart it to update its delay compensation.
   - The Spectral **SPECTRUM** display sits left of OUT. The accent color shows what's being clipped, and the opposite hue shows the detail being kept. The DETAIL knob uses the same opposite hue.
+- **BYPASS** (top right): switches to the untouched input, delayed by the same latency as the processed signal so nothing shifts in time, with a 10 ms crossfade. Hosts that support CLAP's bypass flag use it as the plugin's own bypass. While bypassed, the scope shows the input in grey.
+- **AUTO GAIN** (above IN): turns the output down by whatever In Gain adds, so In only sets how hard the clipper is driven. With nothing clipping, the level stays the same; what you hear changing is only the clipping.
 - **Δ DELTA** (above THRESHOLD, both modes): listen to only what the clipper removes. Each engine runs an unclipped twin of the signal through exactly the same filters, so Delta is truly silent (−156 dBFS in tests) when nothing is clipping. Delta is a monitoring control and isn't saved.
 - **Optional multiband** (Sample mode): up to 4 bands, with crossovers at 6, 12 or 24 dB/oct (first-order, Linkwitz-Riley 2 or Linkwitz-Riley 4). The bands sum back flat, within 0.02 dB. Each band has its own Threshold, Knee and Solo.
 - **UI**: a native interface built with [iPlug2](https://github.com/iPlug2/iPlug2) IGraphics (NanoVG on OpenGL), no web view. It reproduces the approved v7 mockup:
-  - live scope with the orange input behind the grey output, draggable threshold, TIME/ZOOM, FOLLOW, FREEZE, FIT and mouse-wheel zoom (Shift = time)
+  - live scope with the orange input behind the grey output, draggable threshold, TIME, FOLLOW, FREEZE and mouse-wheel zoom (Shift = time)
+  - ZOOM from 0.25× (zoomed out, shows up to +12 dB, for hot inputs) to 16×; it scales evenly around the centre line. FIT zooms so the loudest part of the visible signal fills the scope
   - IN/OUT meters
   - spectrum and band editor (drag in from the ‹ › tabs or right-click to add a band, double-click a crossover to remove it, S = solo)
   - accent-color picker (click the 400SCALPER wordmark)

@@ -19,7 +19,7 @@ public:
         const float c = H / 2, s = (H / 2 - 12) / 1.15f;
         const double T = dbToA (m.P (m.thrId()));
         const float z = float (m.zoom);
-        return { W, H, c, s, s * z, c + float (T) * s * (z - 1), T };
+        return { W, H, c, s, s * z, c, T };   // zoom scales symmetrically around the centre line
     }
 
     void Draw (IGraphics& g) override
@@ -58,7 +58,9 @@ public:
             else base = int64_t (now) - int64_t (winI);
             const int64_t lo = std::max<int64_t> (int64_t (m.haveFrom), int64_t (now) - int64_t (m.cap) + 1);
             auto cyc = [&] (float y) { return std::clamp (y, oy - 2, oy + G.H + 2); };
-            for (int pass = 0; pass < 2; ++pass)
+            // Bypassed: the output IS the input, so draw just the input, in grey.
+            const bool byp = m.P (kBypass) >= 0.5;
+            for (int pass = byp ? 1 : 0; pass < 2; ++pass)
             {
                 g.PathClear();
                 for (int i = 0; i < cols; ++i)
@@ -72,7 +74,8 @@ public:
                         if (sweep && t >= int64_t (now)) t -= int64_t (winI);
                         if (t < lo || t >= int64_t (now)) continue;
                         const auto& e = m.ring[size_t (uint64_t (t) % m.cap)];
-                        const float a = pass == 0 ? e.inMin : e.outMin, b = pass == 0 ? e.inMax : e.outMax;
+                        const bool useIn = pass == 0 || byp;
+                        const float a = useIn ? e.inMin : e.outMin, b = useIn ? e.inMax : e.outMax;
                         mn = std::min (mn, a); mx = std::max (mx, b);
                     }
                     if (mx < -1e8f) continue;
@@ -99,13 +102,18 @@ public:
         for (auto& t : ticks)
         {
             char b[16];
-            if (t.first == 0) std::snprintf (b, sizeof (b), "0"); else std::snprintf (b, sizeof (b), "\xE2\x88\x92%g", std::fabs (t.first));
+            if (t.first == 0) std::snprintf (b, sizeof (b), "0");
+            else if (t.first > 0) std::snprintf (b, sizeof (b), "+%g", t.first);
+            else std::snprintf (b, sizeof (b), "\xE2\x88\x92%g", std::fabs (t.first));
             m.tk.draw (g, b, gut.R - 6, t.second + oy, 9, col::muted, 0.f, EAlign::Far);
         }
 
         // threshold handle label
         {
-            const float ly = oy + G.c - float (G.T) * G.s;
+            const float ly = oy + G.c - float (G.T) * G.sz;
+            thrHit = IRECT();
+            if (ly >= oy + 10 && ly <= oy + G.c - 4)   // hidden when zoomed past it
+            {
             std::string txt = fmtDb (m.P (m.thrId()));
             if (m.nBands() > 1 && ! m.spectral()) txt = "B" + std::to_string (m.sel() + 1) + "  " + txt;
             const float w = m.tk.width (g, txt.c_str(), 10) + 14;
@@ -113,13 +121,15 @@ public:
             box (g, lab, col::panel1c, col::b333, 3);
             m.tk.draw (g, txt.c_str(), lab.MW(), lab.MH(), 10, col::text, 0.f, EAlign::Center);
             thrHit = IRECT (ox, ly - 10, ox + G.W, ly + 10);
+            }
         }
 
         // scope tag (multiband / spectral)
-        if (m.nBands() > 1 || m.spectral())
+        if (m.nBands() > 1 || m.spectral() || m.P (kBypass) >= 0.5)
         {
             std::string tag;
-            if (m.spectral()) tag = "SPECTRAL \xC2\xB7 DETAIL " + std::to_string (int (std::lround (m.P (kDetail)))) + "%";
+            if (m.P (kBypass) >= 0.5) tag = "BYPASSED";
+            else if (m.spectral()) tag = "SPECTRAL \xC2\xB7 DETAIL " + std::to_string (int (std::lround (m.P (kDetail)))) + "%";
             else tag = "BAND " + std::to_string (m.sel() + 1) + " \xC2\xB7 " + m.bandRange (m.sel());
             const float w = m.tk.width (g, tag.c_str(), 9, 0.08f) + 14;
             const IRECT r (ox + 8, oy + 8, ox + 8 + w, oy + 8 + 18);
@@ -139,7 +149,7 @@ public:
         if (zSlider.Contains (x, y)) { drag = Zoom; setSlider (Zoom, x); return; }
         if (followBtn.Contains (x, y)) { m.follow = ! m.follow; return; }
         if (freezeBtn.Contains (x, y)) { m.frozen = ! m.frozen; return; }
-        if (fitBtn.Contains (x, y)) { m.zoom = 1; m.timeWin = 3; return; }
+        if (fitBtn.Contains (x, y)) { m.fitZoom(); return; }
         if (toolsArea.Contains (x, y)) return;
         if (thrHit.Contains (x, y))
         {
@@ -153,7 +163,7 @@ public:
         if (drag == Time || drag == Zoom) { setSlider (drag, x); return; }
         if (drag != Thr) return;
         dragY += dY;
-        const double a = std::max (0.0631, dragA - dragY / geom().s);
+        const double a = std::max (0.0631, dragA - dragY / geom().sz);
         m.set (dragId, 20 * std::log10 (a));
     }
     void OnMouseUp (float, float, const IMouseMod&) override
@@ -188,7 +198,7 @@ private:
     {
         std::vector<std::pair<double, float>> out;
         float lastY = -1e9f;
-        for (double db : { 0.0, -1.0, -2.0, -3.0, -4.5, -6.0, -9.0, -12.0, -18.0, -24.0, -36.0, -48.0 })
+        for (double db : { 18.0, 12.0, 6.0, 3.0, 0.0, -1.0, -2.0, -3.0, -4.5, -6.0, -9.0, -12.0, -18.0, -24.0, -36.0, -48.0, -60.0 })
         {
             const float y = G.cz - float (dbToA (db)) * G.sz;
             if (y < 8 || y > G.cz - 10 || y > G.H - 10 || y - lastY < 24) continue;
@@ -203,7 +213,7 @@ private:
         const IRECT& r = which == Time ? tSlider : zSlider;
         const double t = std::clamp ((x - r.L - 6) / std::max (1.f, r.W() - 12), 0.f, 1.f);
         if (which == Time) m.setTime (0.05 * std::pow (120.0, t));
-        else m.setZoom (std::pow (16.0, t));
+        else m.setZoom (Model::kZoomMin * std::pow (Model::kZoomMax / Model::kZoomMin, t));
     }
 
     void drawSlider (IGraphics& g, const IRECT& r, double t)
@@ -235,10 +245,10 @@ private:
         };
         char tt[16];
         if (m.timeWin < 1) std::snprintf (tt, sizeof (tt), "%d ms", int (std::lround (m.timeWin * 1000))); else std::snprintf (tt, sizeof (tt), "%.1f s", m.timeWin);
-        char zt[16]; std::snprintf (zt, sizeof (zt), "%g\xC3\x97", std::round (m.zoom * 10) / 10);
+        char zt[16]; std::snprintf (zt, sizeof (zt), "%g\xC3\x97", m.zoom < 1 ? std::round (m.zoom * 100) / 100 : std::round (m.zoom * 10) / 10);
         const float x0 = x;
         group ("TIME", tSlider, std::log (m.timeWin / 0.05) / std::log (120.0), tt, valW);
-        group ("ZOOM", zSlider, std::log (m.zoom) / std::log (16.0), zt, zValW);
+        group ("ZOOM", zSlider, std::log (m.zoom / Model::kZoomMin) / std::log (Model::kZoomMax / Model::kZoomMin), zt, zValW);
 
         auto button = [&] (const char* lbl, IRECT& r, bool pressed) {
             const float w = m.tk.width (g, lbl, 9, 0.08f) + 2 * (compact ? 6.f : 8.f);
